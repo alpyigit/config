@@ -1,0 +1,493 @@
+# Application Configuration
+app:
+  name: Spring Config Client Application
+  version: 1.0.0
+  description: Demo application using Spring Cloud Config Server
+  author: Spring Developer
+  environment: development
+
+# Database Configuration
+database:
+  url: jdbc:mysql://localhost:3306/mydb
+  username: admin
+  password: secret123
+  driver-class-name: com.mysql.cj.jdbc.Driver
+  connection-timeout: 30000
+  maximum-pool-size: 10
+  minimum-idle: 2
+  idle-timeout: 300000
+  max-lifetime: 1800000
+  leak-detection-threshold: 60000
+
+# Cache Configuration
+cache:
+  enabled: true
+  type: redis
+  redis:
+    host: localhost
+    port: 6379
+    password: ""
+    timeout: 5000
+    database: 0
+    lettuce:
+      pool:
+        max-active: 8
+        max-wait: -1
+        max-idle: 8
+        min-idle: 0
+
+# Security Configuration
+security:
+  jwt:
+    secret: mySecretKey123456789
+    expiration: 86400000
+    refresh-expiration: 604800000
+  oauth2:
+    enabled: true
+    google:
+      client-id: google-client-id
+      client-secret: google-secret
+    facebook:
+      client-id: facebook-client-id
+      client-secret: facebook-secret
+  cors:
+    allowed-origins: "*"
+    allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+    allowed-headers: "*"
+  csrf:
+    enabled: false
+
+# Messaging Configuration
+messaging:
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: my-consumer-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      retries: 3
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+    connection-timeout: 30000
+
+# Email Configuration
+email:
+  smtp:
+    host: smtp.gmail.com
+    port: 587
+    username: noreply@example.com
+    password: emailpassword
+    auth: true
+    starttls:
+      enable: true
+  from:
+    address: noreply@example.com
+    name: Application Support
+  templates:
+    welcome: welcome-email-template
+    password-reset: password-reset-template
+    notification: notification-template
+
+# File Storage Configuration
+storage:
+  type: local
+  local:
+    path: /uploads
+    max-file-size: 10MB
+    allowed-extensions: jpg,jpeg,png,pdf,doc,docx
+  aws:
+    s3:
+      bucket: my-bucket
+      region: us-east-1
+      access-key: AWS_ACCESS_KEY
+      secret-key: AWS_SECRET_KEY
+      endpoint: https://s3.amazonaws.com
+
+# Monitoring Configuration
+monitoring:
+  metrics:
+    enabled: true
+    export:
+      prometheus:
+        enabled: true
+        step: PT1M
+  health:
+    diskspace:
+      enabled: true
+      threshold: 10MB
+  tracing:
+    enabled: true
+    zipkin:
+      base-url: http://localhost:9411
+  logging:
+    level:
+      com.example: DEBUG
+      org.springframework: INFO
+    file:
+      name: application.log
+      max-size: 10MB
+
+# API Configuration
+api:
+  rate-limit:
+    enabled: true
+    requests-per-minute: 100
+    requests-per-hour: 5000
+  version: v1
+  documentation:
+    title: Spring Config Client API
+    description: API for demonstrating Spring Cloud Config
+    version: 1.0.0
+    contact:
+      name: API Team
+      email: api@example.com
+  timeout:
+    connection: 5000
+    read: 30000
+  retry:
+    max-attempts: 3
+    delay: 1000
+
+# Business Logic Configuration
+business:
+  user:
+    max-login-attempts: 3
+    account-lockout-duration: 300000
+    password:
+      min-length: 8
+      require-uppercase: true
+      require-lowercase: true
+      require-numbers: true
+      require-special-chars: true
+    session-timeout: 1800000
+  order:
+    max-items: 50
+    tax-rate: 0.08
+    shipping-cost: 9.99
+    free-shipping-threshold: 100.0
+  payment:
+    timeout: 30000
+    retry-attempts: 3
+    supported-currencies: USD,EUR,GBP
+
+# Feature Flags
+feature:
+  new-dashboard: true
+  beta-checkout: false
+  advanced-search: true
+  social-login: true
+  mobile-app: false
+  newsletter: true
+  reviews: true
+  recommendations: false
+  dark-mode: true
+  multi-language: false
+  chat-support: true
+  analytics: true
+
+# Performance Configuration
+performance:
+  cache:
+    ttl: 3600
+    max-entries: 1000
+  connection-pool:
+    initial-size: 5
+    max-size: 20
+  thread-pool:
+    core-size: 10
+    max-size: 50
+    queue-capacity: 200
+  async:
+    enabled: true
+  compression:
+    enabled: true
+    min-response-size: 2048
+
+# Integration Configuration
+integration:
+  payment-gateway:
+    url: https://api.payment.com
+    api-key: payment-api-key
+    timeout: 15000
+  shipping:
+    provider: fedex
+    api-url: https://api.fedex.com
+    api-key: shipping-api-key
+  sms:
+    provider: twilio
+    account-sid: twilio-account-sid
+    auth-token: twilio-auth-token
+    from-number: +1234567890
+
+# Notification Configuration
+notification:
+  push:
+    enabled: true
+    firebase:
+      server-key: firebase-server-key
+  email:
+    enabled: true
+  sms:
+    enabled: false
+  webhook:
+    enabled: true
+    url: https://webhook.example.com
+    secret: webhook-secret
+  retry:
+    max-attempts: 5
+    delay: 2000
+
+# Content Management
+content:
+  upload:
+    max-size: 50MB
+    allowed-types: image/jpeg,image/png,application/pdf
+  cdn:
+    enabled: false
+    base-url: https://cdn.example.com
+  image:
+    resize:
+      enabled: true
+      max-width: 1920
+      max-height: 1080
+    quality: 0.8
+
+# Search Configuration
+search:
+  enabled: true
+  provider: elasticsearch
+  elasticsearch:
+    host: localhost
+    port: 9200
+    username: elastic
+    password: elastic123
+  index:
+    name: application-search
+  results:
+    max-size: 100
+  autocomplete:
+    enabled: true
+    min-chars: 2
+
+# Backup Configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"
+  retention-days: 30
+  compression: gzip
+  destination: s3://backup-bucket
+  notifications:
+    email: admin@example.com
+  encryption:
+    enabled: true
+    key: backup-encryption-key
+
+# Social Media Integration
+social:
+  twitter:
+    enabled: false
+    api-key: twitter-api-key
+    api-secret: twitter-api-secret
+  facebook:
+    enabled: false
+    app-id: facebook-app-id
+    app-secret: facebook-app-secret
+  linkedin:
+    enabled: false
+    client-id: linkedin-client-id
+    client-secret: linkedin-client-secret
+
+# Miscellaneous Configuration
+misc:
+  timezone: UTC
+  date-format: yyyy-MM-dd
+  time-format: HH:mm:ss
+  decimal-places: 2
+  currency-symbol: $
+  language-default: en
+  country-default: US
+  company-name: Example Corporation
+  support-email: support@example.com
+  support-phone: +1-555-123-4567
+
+# Complex Configuration with Arrays and Nested Objects
+complex:
+  # Company structure with nested departments and employees
+  company:
+    name: Example Tech Corporation
+    founded: 2010
+    headquarters:
+      address:
+        street: 123 Tech Street
+        city: San Francisco
+        state: CA
+        zipCode: 94105
+        country: USA
+      coordinates:
+        latitude: 37.7749
+        longitude: -122.4194
+    
+    # Array of departments with complex nested structure
+    departments:
+      - name: Engineering
+        code: ENG
+        budget: 5000000.00
+        manager:
+          firstName: John
+          lastName: Smith
+          email: john.smith@example.com
+          phone: +1-555-0101
+          startDate: 2015-03-15
+        employees:
+          - id: 1001
+            firstName: Alice
+            lastName: Johnson
+            email: alice.johnson@example.com
+            position: Senior Software Engineer
+            salary: 120000.00
+            skills: ["Java", "Spring Boot", "Microservices", "AWS"]
+            projects:
+              - name: Config Management System
+                status: active
+                startDate: 2024-01-15
+                endDate: 2024-06-30
+                technologies: ["Spring Cloud Config", "Docker", "Kubernetes"]
+              - name: Payment Gateway
+                status: completed
+                startDate: 2023-08-01
+                endDate: 2023-12-15
+                technologies: ["Spring Security", "JWT", "PostgreSQL"]
+          - id: 1002
+            firstName: Bob
+            lastName: Wilson
+            email: bob.wilson@example.com
+            position: DevOps Engineer
+            salary: 110000.00
+            skills: ["Docker", "Kubernetes", "Jenkins", "Terraform"]
+            projects:
+              - name: CI/CD Pipeline
+                status: active
+                startDate: 2024-02-01
+                endDate: 2024-08-30
+                technologies: ["Jenkins", "Docker", "SonarQube"]
+        
+      - name: Marketing
+        code: MKT
+        budget: 2000000.00
+        manager:
+          firstName: Sarah
+          lastName: Davis
+          email: sarah.davis@example.com
+          phone: +1-555-0102
+          startDate: 2018-06-20
+        employees:
+          - id: 2001
+            firstName: Mike
+            lastName: Brown
+            email: mike.brown@example.com
+            position: Marketing Manager
+            salary: 85000.00
+            skills: ["Digital Marketing", "SEO", "Content Strategy", "Analytics"]
+            projects:
+              - name: Brand Awareness Campaign
+                status: active
+                startDate: 2024-03-01
+                endDate: 2024-09-30
+                technologies: ["Google Analytics", "Facebook Ads", "LinkedIn"]
+
+  # Application modules configuration with complex nested arrays
+  modules:
+    - name: user-management
+      enabled: true
+      version: 2.1.0
+      dependencies: ["security", "database", "email"]
+      configuration:
+        maxUsers: 10000
+        sessionTimeout: 1800
+        passwordPolicy:
+          minLength: 8
+          requireUppercase: true
+          requireNumbers: true
+          requireSpecialChars: true
+          historyCount: 5
+        features:
+          twoFactorAuth: true
+          socialLogin: true
+          passwordRecovery: true
+          accountLocking: true
+    
+    - name: payment-processing
+      enabled: true
+      version: 1.5.2
+      dependencies: ["security", "database", "audit"]
+      configuration:
+        supportedCurrencies: ["USD", "EUR", "GBP", "JPY", "CAD"]
+        paymentMethods:
+          - type: credit-card
+            enabled: true
+            processors: ["stripe", "paypal", "square"]
+            fees:
+              domestic: 2.9
+              international: 3.4
+          - type: bank-transfer
+            enabled: true
+            processors: ["ach", "wire"]
+            fees:
+              domestic: 0.5
+              international: 1.2
+          - type: digital-wallet
+            enabled: true
+            processors: ["apple-pay", "google-pay", "samsung-pay"]
+            fees:
+              domestic: 2.5
+              international: 3.0
+        limits:
+          daily: 50000.00
+          monthly: 500000.00
+          perTransaction: 10000.00
+        
+  # API Gateway routing configuration
+  apiGateway:
+    routes:
+      - id: user-service
+        uri: http://user-service:8081
+        predicates: ["/api/users/**"]
+        filters:
+          - name: RateLimiter
+            args:
+              requestsPerSecond: 100
+              burstCapacity: 200
+          - name: RequestLogging
+            args:
+              includeHeaders: true
+              includePayload: false
+        metadata:
+          version: v2
+          team: backend
+          criticality: high
+      
+      - id: payment-service
+        uri: http://payment-service:8082
+        predicates: ["/api/payments/**"]
+        filters:
+          - name: RateLimiter
+            args:
+              requestsPerSecond: 50
+              burstCapacity: 100
+          - name: Authentication
+            args:
+              required: true
+              scopes: ["payment:read", "payment:write"]
+        metadata:
+          version: v1
+          team: fintech
+          criticality: critical
