@@ -1,5 +1,0 @@
-# Default Application Properties
-app:
-  name: Spring Config Client
-  version: 1.0.0
-  description: Default configuration for Spring Config Client
