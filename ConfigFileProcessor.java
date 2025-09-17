@@ -61,7 +61,7 @@ public class ConfigFileProcessor {
         // Create target directory if it doesn't exist
         Files.createDirectories(targetPath);
 
-        // Process all YAML files recursively in source directory and subdirectories
+                // Process all YAML files recursively in source directory and subdirectories
         Files.walk(sourcePath)
                 .filter(path -> Files.isRegularFile(path) && 
                        (path.toString().endsWith(".yml") || path.toString().endsWith(".yaml")))
@@ -69,7 +69,17 @@ public class ConfigFileProcessor {
                     try {
                         processYamlFile(yamlFile, sourcePath, targetPath);
                     } catch (IOException e) {
+                        System.err.println("❌ Failed to process file: " + yamlFile);
+                        System.err.println("   Error details: " + e.getMessage());
+                        if (e.getCause() != null) {
+                            System.err.println("   Caused by: " + e.getCause().getMessage());
+                        }
                         throw new RuntimeException("Failed to process file: " + yamlFile, e);
+                    } catch (Exception e) {
+                        System.err.println("❌ Unexpected error processing file: " + yamlFile);
+                        System.err.println("   Error details: " + e.getMessage());
+                        e.printStackTrace();
+                        throw new RuntimeException("Unexpected error processing file: " + yamlFile, e);
                     }
                 });
 
@@ -99,15 +109,24 @@ public class ConfigFileProcessor {
                     yamlDocuments = parseMultiDocumentYaml(fileContent);
                 } else {
                     // Single document
-                    Map<String, Object> singleDoc = yamlMapper.readValue(sourceFile.toFile(), Map.class);
-                    if (singleDoc == null) {
-                        singleDoc = new LinkedHashMap<>();
+                    try {
+                        Map<String, Object> singleDoc = yamlMapper.readValue(sourceFile.toFile(), Map.class);
+                        if (singleDoc == null) {
+                            singleDoc = new LinkedHashMap<>();
+                        }
+                        yamlDocuments = List.of(singleDoc);
+                    } catch (Exception singleDocError) {
+                        System.err.println("  ❌ Error parsing single-document YAML: " + singleDocError.getMessage());
+                        throw singleDocError;
                     }
-                    yamlDocuments = List.of(singleDoc);
                 }
             }
         } catch (Exception e) {
-            System.out.println("  ⚠ Error reading YAML file, treating as empty: " + e.getMessage());
+            System.err.println("  ❌ Error reading YAML file '" + relativePath + "': " + e.getMessage());
+            if (e.getCause() != null) {
+                System.err.println("     Caused by: " + e.getCause().getMessage());
+            }
+            System.out.println("  ⚠ Treating as empty due to error");
             yamlDocuments = List.of(new LinkedHashMap<>());
         }
 
@@ -121,14 +140,27 @@ public class ConfigFileProcessor {
                 System.out.println("  🔒 Processing document " + (i + 1) + "/" + yamlDocuments.size());
             }
             
-            // Encrypt sensitive values for this document
-            Map<String, Object> encryptedDocument = encryptConfigRecursively(document, "");
-            encryptedDocuments.add(encryptedDocument);
-            
-            // Accumulate statistics
-            ConfigStats docStats = generateStats(document, encryptedDocument);
-            totalStats.totalValues += docStats.totalValues;
-            totalStats.encryptedCount += docStats.encryptedCount;
+            try {
+                // Encrypt sensitive values for this document
+                Map<String, Object> encryptedDocument = encryptConfigRecursively(document, "");
+                encryptedDocuments.add(encryptedDocument);
+                
+                // Accumulate statistics
+                ConfigStats docStats = generateStats(document, encryptedDocument);
+                totalStats.totalValues += docStats.totalValues;
+                totalStats.encryptedCount += docStats.encryptedCount;
+                
+                if (yamlDocuments.size() > 1) {
+                    System.out.println("    ✅ Document " + (i + 1) + " processed: " + docStats.encryptedCount + "/" + docStats.totalValues + " values encrypted");
+                }
+            } catch (Exception docError) {
+                System.err.println("  ❌ Error processing document " + (i + 1) + ": " + docError.getMessage());
+                docError.printStackTrace();
+                // Add original document on error
+                encryptedDocuments.add(document);
+                ConfigStats docStats = generateStats(document, document);
+                totalStats.totalValues += docStats.totalValues;
+            }
         }
         
         // Create target file path maintaining directory structure
@@ -143,7 +175,13 @@ public class ConfigFileProcessor {
         Path targetFile = targetDir.resolve(encryptedFileName);
 
         // Write encrypted configuration(s)
-        writeEncryptedYaml(encryptedDocuments, totalStats, targetFile.toFile());
+        try {
+            writeEncryptedYaml(encryptedDocuments, totalStats, targetFile.toFile());
+        } catch (Exception writeError) {
+            System.err.println("  ❌ Error writing encrypted file '" + targetFile + "': " + writeError.getMessage());
+            writeError.printStackTrace();
+            throw new IOException("Failed to write encrypted file: " + targetFile, writeError);
+        }
 
         String docInfo = yamlDocuments.size() > 1 ? " (" + yamlDocuments.size() + " documents)" : "";
         System.out.printf("✓ %s -> %s%s (Encrypted: %d/%d values)%n", 
@@ -153,39 +191,73 @@ public class ConfigFileProcessor {
     @SuppressWarnings("unchecked")
     private Map<String, Object> encryptConfigRecursively(Map<String, Object> config, String parentKey) {
         Map<String, Object> result = new LinkedHashMap<>();
+        String currentKey = "";
 
-        for (Map.Entry<String, Object> entry : config.entrySet()) {
-            String key = entry.getKey();
-            Object value = entry.getValue();
-            String fullKey = parentKey.isEmpty() ? key : parentKey + "." + key;
+        try {
+            for (Map.Entry<String, Object> entry : config.entrySet()) {
+                String key = entry.getKey();
+                Object value = entry.getValue();
+                String fullKey = parentKey.isEmpty() ? key : parentKey + "." + key;
+                currentKey = fullKey; // Track current key for error logging
 
-            if (value instanceof Map) {
-                // Recursively process nested maps
-                result.put(key, encryptConfigRecursively((Map<String, Object>) value, fullKey));
-            } else if (value instanceof List) {
-                // Process arrays/lists
-                result.put(key, encryptListRecursively((List<Object>) value, fullKey));
-            } else if (value instanceof String) {
-                String stringValue = (String) value;
-                
-                // Encrypt all string values
-                if (shouldEncrypt(stringValue)) {
-                    result.put(key, encryptionService.encrypt(stringValue));
-                } else {
+                try {
+                    if (value instanceof Map) {
+                        // Recursively process nested maps
+                        result.put(key, encryptConfigRecursively((Map<String, Object>) value, fullKey));
+                    } else if (value instanceof List) {
+                        // Process arrays/lists
+                        result.put(key, encryptListRecursively((List<Object>) value, fullKey));
+                    } else if (value instanceof String) {
+                        String stringValue = (String) value;
+                        
+                        // Encrypt all string values
+                        if (shouldEncrypt(stringValue)) {
+                            try {
+                                result.put(key, encryptionService.encrypt(stringValue));
+                            } catch (Exception encryptError) {
+                                System.err.println("  ❌ Encryption failed for key '" + fullKey + "' with value: " + stringValue);
+                                System.err.println("     Error: " + encryptError.getMessage());
+                                // Keep original value on encryption failure
+                                result.put(key, value);
+                            }
+                        } else {
+                            result.put(key, value);
+                        }
+                    } else if (value instanceof Boolean) {
+                        // Convert boolean to string and encrypt it
+                        String booleanAsString = value.toString();
+                        try {
+                            result.put(key, encryptionService.encrypt(booleanAsString));
+                        } catch (Exception encryptError) {
+                            System.err.println("  ❌ Encryption failed for boolean key '" + fullKey + "' with value: " + booleanAsString);
+                            System.err.println("     Error: " + encryptError.getMessage());
+                            result.put(key, value);
+                        }
+                    } else if (value instanceof Number) {
+                        // Convert numbers to string and encrypt them
+                        String numberAsString = value.toString();
+                        try {
+                            result.put(key, encryptionService.encrypt(numberAsString));
+                        } catch (Exception encryptError) {
+                            System.err.println("  ❌ Encryption failed for number key '" + fullKey + "' with value: " + numberAsString);
+                            System.err.println("     Error: " + encryptError.getMessage());
+                            result.put(key, value);
+                        }
+                    } else {
+                        // Keep other values as-is
+                        result.put(key, value);
+                    }
+                } catch (Exception keyProcessError) {
+                    System.err.println("  ❌ Error processing key '" + fullKey + "': " + keyProcessError.getMessage());
+                    // Keep original value on any processing error
                     result.put(key, value);
                 }
-            } else if (value instanceof Boolean) {
-                // Convert boolean to string and encrypt it
-                String booleanAsString = value.toString();
-                result.put(key, encryptionService.encrypt(booleanAsString));
-            } else if (value instanceof Number) {
-                // Convert numbers to string and encrypt them
-                String numberAsString = value.toString();
-                result.put(key, encryptionService.encrypt(numberAsString));
-            } else {
-                // Keep other values as-is
-                result.put(key, value);
             }
+        } catch (Exception generalError) {
+            System.err.println("  ❌ General error in encryptConfigRecursively at key '" + currentKey + "': " + generalError.getMessage());
+            generalError.printStackTrace();
+            // Return original config on general failure
+            return config;
         }
 
         return result;
@@ -199,31 +271,55 @@ public class ConfigFileProcessor {
             Object item = list.get(i);
             String itemKey = parentKey + "[" + i + "]";
             
-            if (item instanceof Map) {
-                // Recursively process nested maps in arrays
-                result.add(encryptConfigRecursively((Map<String, Object>) item, itemKey));
-            } else if (item instanceof List) {
-                // Recursively process nested arrays
-                result.add(encryptListRecursively((List<Object>) item, itemKey));
-            } else if (item instanceof String) {
-                String stringValue = (String) item;
-                
-                // Encrypt all string values in arrays
-                if (shouldEncrypt(stringValue)) {
-                    result.add(encryptionService.encrypt(stringValue));
+            try {
+                if (item instanceof Map) {
+                    // Recursively process nested maps in arrays
+                    result.add(encryptConfigRecursively((Map<String, Object>) item, itemKey));
+                } else if (item instanceof List) {
+                    // Recursively process nested arrays
+                    result.add(encryptListRecursively((List<Object>) item, itemKey));
+                } else if (item instanceof String) {
+                    String stringValue = (String) item;
+                    
+                    // Encrypt all string values in arrays
+                    if (shouldEncrypt(stringValue)) {
+                        try {
+                            result.add(encryptionService.encrypt(stringValue));
+                        } catch (Exception encryptError) {
+                            System.err.println("  ❌ Encryption failed for array item '" + itemKey + "' with value: " + stringValue);
+                            System.err.println("     Error: " + encryptError.getMessage());
+                            result.add(item);
+                        }
+                    } else {
+                        result.add(item);
+                    }
+                } else if (item instanceof Boolean) {
+                    // Convert boolean to string and encrypt it
+                    String booleanAsString = item.toString();
+                    try {
+                        result.add(encryptionService.encrypt(booleanAsString));
+                    } catch (Exception encryptError) {
+                        System.err.println("  ❌ Encryption failed for boolean array item '" + itemKey + "' with value: " + booleanAsString);
+                        System.err.println("     Error: " + encryptError.getMessage());
+                        result.add(item);
+                    }
+                } else if (item instanceof Number) {
+                    // Convert numbers to string and encrypt them
+                    String numberAsString = item.toString();
+                    try {
+                        result.add(encryptionService.encrypt(numberAsString));
+                    } catch (Exception encryptError) {
+                        System.err.println("  ❌ Encryption failed for number array item '" + itemKey + "' with value: " + numberAsString);
+                        System.err.println("     Error: " + encryptError.getMessage());
+                        result.add(item);
+                    }
                 } else {
+                    // Keep other values as-is
                     result.add(item);
                 }
-            } else if (item instanceof Boolean) {
-                // Convert boolean to string and encrypt it
-                String booleanAsString = item.toString();
-                result.add(encryptionService.encrypt(booleanAsString));
-            } else if (item instanceof Number) {
-                // Convert numbers to string and encrypt them
-                String numberAsString = item.toString();
-                result.add(encryptionService.encrypt(numberAsString));
-            } else {
-                // Keep other values as-is
+            } catch (Exception itemProcessError) {
+                System.err.println("  ❌ Error processing array item '" + itemKey + "': " + itemProcessError.getMessage());
+                // Keep original item on any processing error
                 result.add(item);
             }
         }
@@ -386,7 +482,8 @@ public class ConfigFileProcessor {
                             documents.add(parsedDoc);
                         }
                     } catch (Exception parseError) {
-                        System.out.println("    ⚠ Skipping malformed document " + (i + 1) + ": " + parseError.getMessage());
+                        System.err.println("    ❌ Skipping malformed document " + (i + 1) + " in manual split: " + parseError.getMessage());
+                        System.err.println("        Document content preview: " + (part.length() > 100 ? part.substring(0, 100) + "..." : part));
                     }
                 }
             } catch (Exception fallbackError) {
