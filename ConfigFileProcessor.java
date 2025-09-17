@@ -350,8 +350,32 @@ public class ConfigFileProcessor {
             return false;
         }
         
-        // ENCRYPT ALL NON-EMPTY STRING VALUES
+        // Log URL values being processed for better debugging
+        if (isUrlValue(value)) {
+            System.out.println("    🔗 Processing URL value: " + value);
+        }
+        
+        // ENCRYPT ALL NON-EMPTY STRING VALUES (including URLs)
         return true;
+    }
+    
+    /**
+     * Check if a string value appears to be a URL
+     * This is used for enhanced logging during processing
+     */
+    private boolean isUrlValue(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return false;
+        }
+        
+        String trimmed = value.trim().toLowerCase();
+        return trimmed.startsWith("http://") || 
+               trimmed.startsWith("https://") ||
+               trimmed.startsWith("ftp://") ||
+               trimmed.startsWith("jdbc:") ||
+               trimmed.startsWith("redis://") ||
+               trimmed.startsWith("mongodb://") ||
+               trimmed.contains("://"); // Generic protocol detection
     }
 
     @SuppressWarnings("unchecked")
