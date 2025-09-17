@@ -201,6 +201,12 @@ public class ConfigFileProcessor {
                 currentKey = fullKey; // Track current key for error logging
 
                 try {
+                    // Handle null values explicitly
+                    if (value == null) {
+                        result.put(key, null);
+                        continue;
+                    }
+                    
                     if (value instanceof Map) {
                         // Recursively process nested maps
                         result.put(key, encryptConfigRecursively((Map<String, Object>) value, fullKey));
@@ -225,21 +231,21 @@ public class ConfigFileProcessor {
                         }
                     } else if (value instanceof Boolean) {
                         // Convert boolean to string and encrypt it
-                        String booleanAsString = value.toString();
                         try {
+                            String booleanAsString = String.valueOf(value); // Use String.valueOf instead of toString for null safety
                             result.put(key, encryptionService.encrypt(booleanAsString));
                         } catch (Exception encryptError) {
-                            System.err.println("  ❌ Encryption failed for boolean key '" + fullKey + "' with value: " + booleanAsString);
+                            System.err.println("  ❌ Encryption failed for boolean key '" + fullKey + "' with value: " + value);
                             System.err.println("     Error: " + encryptError.getMessage());
                             result.put(key, value);
                         }
                     } else if (value instanceof Number) {
                         // Convert numbers to string and encrypt them
-                        String numberAsString = value.toString();
                         try {
+                            String numberAsString = String.valueOf(value); // Use String.valueOf instead of toString for null safety
                             result.put(key, encryptionService.encrypt(numberAsString));
                         } catch (Exception encryptError) {
-                            System.err.println("  ❌ Encryption failed for number key '" + fullKey + "' with value: " + numberAsString);
+                            System.err.println("  ❌ Encryption failed for number key '" + fullKey + "' with value: " + value);
                             System.err.println("     Error: " + encryptError.getMessage());
                             result.put(key, value);
                         }
@@ -272,6 +278,12 @@ public class ConfigFileProcessor {
             String itemKey = parentKey + "[" + i + "]";
             
             try {
+                // Handle null values explicitly
+                if (item == null) {
+                    result.add(null);
+                    continue;
+                }
+                
                 if (item instanceof Map) {
                     // Recursively process nested maps in arrays
                     result.add(encryptConfigRecursively((Map<String, Object>) item, itemKey));
@@ -295,21 +307,21 @@ public class ConfigFileProcessor {
                     }
                 } else if (item instanceof Boolean) {
                     // Convert boolean to string and encrypt it
-                    String booleanAsString = item.toString();
                     try {
+                        String booleanAsString = String.valueOf(item); // Use String.valueOf instead of toString for null safety
                         result.add(encryptionService.encrypt(booleanAsString));
                     } catch (Exception encryptError) {
-                        System.err.println("  ❌ Encryption failed for boolean array item '" + itemKey + "' with value: " + booleanAsString);
+                        System.err.println("  ❌ Encryption failed for boolean array item '" + itemKey + "' with value: " + item);
                         System.err.println("     Error: " + encryptError.getMessage());
                         result.add(item);
                     }
                 } else if (item instanceof Number) {
                     // Convert numbers to string and encrypt them
-                    String numberAsString = item.toString();
                     try {
+                        String numberAsString = String.valueOf(item); // Use String.valueOf instead of toString for null safety
                         result.add(encryptionService.encrypt(numberAsString));
                     } catch (Exception encryptError) {
-                        System.err.println("  ❌ Encryption failed for number array item '" + itemKey + "' with value: " + numberAsString);
+                        System.err.println("  ❌ Encryption failed for number array item '" + itemKey + "' with value: " + item);
                         System.err.println("     Error: " + encryptError.getMessage());
                         result.add(item);
                     }
@@ -355,11 +367,38 @@ public class ConfigFileProcessor {
         for (Object value : config.values()) {
             if (value instanceof Map) {
                 countValues((Map<String, Object>) value, stats, countingEncrypted);
-            } else if (value instanceof String) {
+            } else if (value instanceof List) {
+                countListValues((List<Object>) value, stats, countingEncrypted);
+            } else {
+                // Count any leaf value (String, Boolean, Number, etc.)
                 if (!countingEncrypted) {
                     stats.totalValues++;
-                } else if (encryptionService.isEncrypted((String) value)) {
-                    stats.encryptedCount++;
+                } else {
+                    // After encryption, check if it's an encrypted string
+                    if (value instanceof String && encryptionService.isEncrypted((String) value)) {
+                        stats.encryptedCount++;
+                    }
+                }
+            }
+        }
+    }
+    
+    @SuppressWarnings("unchecked")
+    private void countListValues(List<Object> list, ConfigStats stats, boolean countingEncrypted) {
+        for (Object item : list) {
+            if (item instanceof Map) {
+                countValues((Map<String, Object>) item, stats, countingEncrypted);
+            } else if (item instanceof List) {
+                countListValues((List<Object>) item, stats, countingEncrypted);
+            } else {
+                // Count any leaf value (String, Boolean, Number, etc.)
+                if (!countingEncrypted) {
+                    stats.totalValues++;
+                } else {
+                    // After encryption, check if it's an encrypted string
+                    if (item instanceof String && encryptionService.isEncrypted((String) item)) {
+                        stats.encryptedCount++;
+                    }
                 }
             }
         }
