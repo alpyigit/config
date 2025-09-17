@@ -165,14 +165,13 @@ public class ConfigFileProcessor {
         
         // Create target file path maintaining directory structure
         String fileName = sourceFile.getFileName().toString();
-        String encryptedFileName = fileName.replace(".yml", "-encrypted.yml").replace(".yaml", "-encrypted.yaml");
         
         // Get the relative directory path and create it in target
         Path relativeDir = relativePath.getParent();
         Path targetDir = relativeDir != null ? targetRoot.resolve(relativeDir) : targetRoot;
         Files.createDirectories(targetDir);
         
-        Path targetFile = targetDir.resolve(encryptedFileName);
+        Path targetFile = targetDir.resolve(fileName);
 
         // Write encrypted configuration(s)
         try {
@@ -467,6 +466,10 @@ public class ConfigFileProcessor {
                         writer.write("{}\n");
                     } else {
                         String yamlContent = snakeYaml.dump(document);
+                        
+                        // Post-process to fix dot notation keys by re-adding quotes where needed
+                        yamlContent = fixDotNotationKeys(yamlContent);
+                        
                         writer.write(yamlContent);
                         if (!yamlContent.endsWith("\n")) {
                             writer.write("\n");
@@ -570,6 +573,46 @@ public class ConfigFileProcessor {
         }
         
         return documents;
+    }
+
+    /**
+     * Fix dot notation keys by adding quotes where needed
+     * This handles keys that start with dots and should be quoted
+     */
+    private String fixDotNotationKeys(String yamlContent) {
+        if (yamlContent == null || yamlContent.isEmpty()) {
+            return yamlContent;
+        }
+        
+        // Split into lines for processing
+        String[] lines = yamlContent.split("\n");
+        StringBuilder result = new StringBuilder();
+        
+        for (String line : lines) {
+            // Check if this line contains a key that starts with a dot and is not quoted
+            if (line.matches("\\s*\\.[^:]*:\\s*.*")) {
+                // Extract the key part before the colon
+                String trimmed = line.trim();
+                int colonIndex = trimmed.indexOf(':');
+                if (colonIndex > 0) {
+                    String key = trimmed.substring(0, colonIndex);
+                    String valuesPart = trimmed.substring(colonIndex);
+                    
+                    // If key starts with dot and is not already quoted, add quotes
+                    if (key.startsWith(".") && !key.startsWith("'") && !key.startsWith("\"")) {
+                        String indentation = line.substring(0, line.indexOf(line.trim()));
+                        line = indentation + "'" + key + "'" + valuesPart;
+                    }
+                }
+            }
+            
+            result.append(line);
+            if (!line.equals(lines[lines.length - 1])) {
+                result.append("\n");
+            }
+        }
+        
+        return result.toString();
     }
 
     private static class ConfigStats {
