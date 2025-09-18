@@ -166,12 +166,23 @@ public class ConfigFileProcessor {
         // Create target file path maintaining directory structure
         String fileName = sourceFile.getFileName().toString();
         
+        // Add -encrypted suffix before the file extension
+        String encryptedFileName;
+        int lastDotIndex = fileName.lastIndexOf('.');
+        if (lastDotIndex > 0) {
+            String nameWithoutExtension = fileName.substring(0, lastDotIndex);
+            String extension = fileName.substring(lastDotIndex);
+            encryptedFileName = nameWithoutExtension + "-encrypted" + extension;
+        } else {
+            encryptedFileName = fileName + "-encrypted";
+        }
+        
         // Get the relative directory path and create it in target
         Path relativeDir = relativePath.getParent();
         Path targetDir = relativeDir != null ? targetRoot.resolve(relativeDir) : targetRoot;
         Files.createDirectories(targetDir);
         
-        Path targetFile = targetDir.resolve(fileName);
+        Path targetFile = targetDir.resolve(encryptedFileName);
 
         // Write encrypted configuration(s)
         try {
@@ -390,7 +401,7 @@ public class ConfigFileProcessor {
     
     /**
      * Check if a configuration key represents Spring metadata that should not be encrypted
-     * @param fullKey The complete key path (e.g. "spring.config.activate.on-profile")
+     * @param fullKey The complete key path (e.g. "spring.datasource.url")
      * @return true if the key should be excluded from encryption
      */
     private boolean isSpringMetadata(String fullKey) {
@@ -400,48 +411,23 @@ public class ConfigFileProcessor {
         
         String key = fullKey.toLowerCase();
         
-        // Spring Framework METADATA keys that should NOT be encrypted
-        // These are configuration keys that Spring needs to read directly for framework operation
-        return 
-               // Spring application metadata
-               key.equals("spring.application.name") ||
-               key.startsWith("spring.config.") ||           // Profile activation, imports, etc.
-               key.equals("spring.config.activate.on-profile") ||  // Profile activation
-               key.startsWith("spring.profiles.") ||         // Profile configuration
-               
-               // Server configuration that Spring reads directly
-               key.startsWith("server.port") ||
-               key.startsWith("server.servlet.context-path") ||
-               key.startsWith("server.ssl.enabled") ||
-               
-               // Management/Actuator endpoints
-               key.startsWith("management.") ||              // All actuator management
-               
-               // Logging configuration
-               key.startsWith("logging.level.") ||           // Logging levels
-               key.startsWith("logging.config") ||
-               key.startsWith("logging.file.name") ||
-               
-               // Service discovery metadata
-               key.startsWith("eureka.instance.hostname") ||
-               key.startsWith("eureka.instance.port") ||
-               key.startsWith("eureka.client.service-url") ||
-               
-               // Feature flags and boolean configurations that control behavior
-               key.equals("debug") ||                       // Debug flag
-               key.equals("trace") ||                       // Trace flag
-               key.endsWith(".enabled") ||                  // Feature toggles (*.enabled)
-               
-               // Health check and info endpoints
-               key.contains(".actuator.") ||                // Actuator specific config
-               key.contains(".health.") ||                  // Health check config
-               key.contains(".metrics.") ||                 // Metrics config
-               key.contains(".info.") ||                    // Application info
-               
-               // Timeout values that need to be read by Spring for configuration
-               key.equals("spring.config.timeout") ||
-               key.equals("spring.cloud.config.request-connect-timeout") ||
-               key.equals("spring.cloud.config.request-read-timeout");
+        // Special case: Allow encryption of specific datasource properties
+        if (key.equals("spring.datasource.baseurl") || 
+            key.equals("spring.datasource.username") || 
+            key.equals("spring.datasource.password")) {
+            return false; // These should be encrypted
+        }
+        return
+               key.startsWith("spring") ||   
+               key.startsWith("scope") || 
+               key.startsWith("siper") || 
+               key.startsWith("logging") || 
+               key.startsWith("server") || 
+               key.startsWith("ports") || 
+               key.startsWith("opentracing") || 
+               key.startsWith("services") || 
+               key.startsWith("management");
+
     }
     
     /**
