@@ -64,7 +64,8 @@ public class ConfigFileProcessor {
         // Process all YAML files recursively in source directory and subdirectories
         Files.walk(sourcePath)
                 .filter(path -> Files.isRegularFile(path) && 
-                       (path.toString().endsWith(".yml") || path.toString().endsWith(".yaml")))
+                       (path.toString().endsWith(".yml") || path.toString().endsWith(".yaml")) &&
+                       !path.getFileName().toString().toLowerCase().contains("public"))
                 .forEach(yamlFile -> {
                     try {
                         processYamlFile(yamlFile, sourcePath, targetPath);
@@ -158,23 +159,14 @@ public class ConfigFileProcessor {
         // Create target file path maintaining directory structure
         String fileName = sourceFile.getFileName().toString();
         
-        // Add -encrypted suffix before the file extension
-        String encryptedFileName;
-        int lastDotIndex = fileName.lastIndexOf('.');
-        if (lastDotIndex > 0) {
-            String nameWithoutExtension = fileName.substring(0, lastDotIndex);
-            String extension = fileName.substring(lastDotIndex);
-            encryptedFileName = nameWithoutExtension + "-encrypted" + extension;
-        } else {
-            encryptedFileName = fileName + "-encrypted";
-        }
+        // Use original filename without any suffix
         
         // Get the relative directory path and create it in target
         Path relativeDir = relativePath.getParent();
         Path targetDir = relativeDir != null ? targetRoot.resolve(relativeDir) : targetRoot;
         Files.createDirectories(targetDir);
         
-        Path targetFile = targetDir.resolve(encryptedFileName);
+        Path targetFile = targetDir.resolve(fileName);
 
         // Write encrypted configuration(s)
         try {
