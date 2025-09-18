@@ -132,7 +132,6 @@ public class ConfigFileProcessor {
 
         // Process each document
         List<Map<String, Object>> encryptedDocuments = new ArrayList<>();
-        ConfigStats totalStats = new ConfigStats();
         
         for (int i = 0; i < yamlDocuments.size(); i++) {
             Map<String, Object> document = yamlDocuments.get(i);
@@ -145,21 +144,14 @@ public class ConfigFileProcessor {
                 Map<String, Object> encryptedDocument = encryptConfigRecursively(document, "");
                 encryptedDocuments.add(encryptedDocument);
                 
-                // Accumulate statistics
-                ConfigStats docStats = generateStats(document, encryptedDocument);
-                totalStats.totalValues += docStats.totalValues;
-                totalStats.encryptedCount += docStats.encryptedCount;
-                
                 if (yamlDocuments.size() > 1) {
-                    System.out.println("    ✅ Document " + (i + 1) + " processed: " + docStats.encryptedCount + "/" + docStats.totalValues + " values encrypted");
+                    System.out.println("    ✅ Document " + (i + 1) + " processed successfully");
                 }
             } catch (Exception docError) {
                 System.err.println("  ❌ Error processing document " + (i + 1) + ": " + docError.getMessage());
                 docError.printStackTrace();
                 // Add original document on error
                 encryptedDocuments.add(document);
-                ConfigStats docStats = generateStats(document, document);
-                totalStats.totalValues += docStats.totalValues;
             }
         }
         
@@ -186,7 +178,7 @@ public class ConfigFileProcessor {
 
         // Write encrypted configuration(s)
         try {
-            writeEncryptedYaml(encryptedDocuments, totalStats, targetFile.toFile());
+            writeEncryptedYaml(encryptedDocuments, targetFile.toFile());
         } catch (Exception writeError) {
             System.err.println("  ❌ Error writing encrypted file '" + targetFile + "': " + writeError.getMessage());
             writeError.printStackTrace();
@@ -194,8 +186,8 @@ public class ConfigFileProcessor {
         }
 
         String docInfo = yamlDocuments.size() > 1 ? " (" + yamlDocuments.size() + " documents)" : "";
-        System.out.printf("✓ %s -> %s%s (Encrypted: %d/%d values)%n", 
-                relativePath, targetRoot.relativize(targetFile), docInfo, totalStats.encryptedCount, totalStats.totalValues);
+        System.out.printf("✓ %s -> %s%s%n", 
+                relativePath, targetRoot.relativize(targetFile), docInfo);
     }
 
     @SuppressWarnings("unchecked")
@@ -449,76 +441,11 @@ public class ConfigFileProcessor {
                trimmed.contains("://"); // Generic protocol detection
     }
 
-    @SuppressWarnings("unchecked")
-    private ConfigStats generateStats(Map<String, Object> original, Map<String, Object> encrypted) {
-        ConfigStats stats = new ConfigStats();
-        countValues(original, stats, false);
-        countValues(encrypted, stats, true);
-        return stats;
-    }
-
-    @SuppressWarnings("unchecked")
-    private void countValues(Map<String, Object> config, ConfigStats stats, boolean countingEncrypted) {
-        for (Object value : config.values()) {
-            if (value instanceof Map) {
-                countValues((Map<String, Object>) value, stats, countingEncrypted);
-            } else if (value instanceof List) {
-                countListValues((List<Object>) value, stats, countingEncrypted);
-            } else {
-                // Count any leaf value (String, Boolean, Number, etc.)
-                if (!countingEncrypted) {
-                    stats.totalValues++;
-                } else {
-                    // After encryption, check if it's an encrypted string
-                    if (value instanceof String && encryptionService.isEncrypted((String) value)) {
-                        stats.encryptedCount++;
-                    }
-                }
-            }
-        }
-    }
-    
-    @SuppressWarnings("unchecked")
-    private void countListValues(List<Object> list, ConfigStats stats, boolean countingEncrypted) {
-        for (Object item : list) {
-            if (item instanceof Map) {
-                countValues((Map<String, Object>) item, stats, countingEncrypted);
-            } else if (item instanceof List) {
-                countListValues((List<Object>) item, stats, countingEncrypted);
-            } else {
-                // Count any leaf value (String, Boolean, Number, etc.)
-                if (!countingEncrypted) {
-                    stats.totalValues++;
-                } else {
-                    // After encryption, check if it's an encrypted string
-                    if (item instanceof String && encryptionService.isEncrypted((String) item)) {
-                        stats.encryptedCount++;
-                    }
-                }
-            }
-        }
-    }
-
-    private void writeEncryptedYaml(List<Map<String, Object>> documents, ConfigStats stats, File targetFile) throws IOException {
+    private void writeEncryptedYaml(List<Map<String, Object>> documents, File targetFile) throws IOException {
         try (FileWriter writer = new FileWriter(targetFile)) {
             // Write header comment
             writer.write("# Encrypted Configuration File\n");
             writer.write("# Generated by Config Encryptor\n");
-            writer.write("# Total values: " + stats.totalValues + "\n");
-            writer.write("# Encrypted values: " + stats.encryptedCount + "\n");
-            writer.write("# Plain values: " + (stats.totalValues - stats.encryptedCount) + "\n");
-            
-            // Handle division by zero for empty files
-            if (stats.totalValues > 0) {
-                writer.write("# Encryption percentage: " + String.format("%.1f", (stats.encryptedCount * 100.0 / stats.totalValues)) + "%\n");
-            } else {
-                writer.write("# Encryption percentage: N/A (empty file)\n");
-            }
-            
-            if (documents.size() > 1) {
-                writer.write("# Documents: " + documents.size() + " (multi-document YAML)\n");
-            }
-            
             writer.write("# WARNING: This file contains encrypted values. Do not edit manually.\n\n");
             
             // Write YAML content
@@ -687,8 +614,4 @@ public class ConfigFileProcessor {
         return result.toString();
     }
 
-    private static class ConfigStats {
-        int totalValues = 0;
-        int encryptedCount = 0;
-    }
 }
