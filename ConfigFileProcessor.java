@@ -64,11 +64,15 @@ public class ConfigFileProcessor {
         // Process all YAML files recursively in source directory and subdirectories
         Files.walk(sourcePath)
                 .filter(path -> Files.isRegularFile(path) && 
-                       (path.toString().endsWith(".yml") || path.toString().endsWith(".yaml")) &&
-                       !path.getFileName().toString().toLowerCase().contains("public"))
+                       (path.toString().endsWith(".yml") || path.toString().endsWith(".yaml")))
                 .forEach(yamlFile -> {
                     try {
-                        processYamlFile(yamlFile, sourcePath, targetPath);
+                        // Check if file contains "public" in filename
+                        if (yamlFile.getFileName().toString().toLowerCase().contains("public")) {
+                            copyPublicFile(yamlFile, sourcePath, targetPath);
+                        } else {
+                            processYamlFile(yamlFile, sourcePath, targetPath);
+                        }
                     } catch (IOException e) {
                         System.err.println("❌ Failed to process file: " + yamlFile);
                         System.err.println("   Error details: " + e.getMessage());
@@ -87,6 +91,28 @@ public class ConfigFileProcessor {
         System.out.println("Configuration encryption completed!");
         System.out.println("Source directory: " + sourceDir);
         System.out.println("Target directory: " + targetDir);
+    }
+
+    /**
+     * Copy public files as-is without encryption
+     */
+    private void copyPublicFile(Path sourceFile, Path sourceRoot, Path targetRoot) throws IOException {
+        // Calculate relative path from source root
+        Path relativePath = sourceRoot.relativize(sourceFile);
+        System.out.println("Copying public file: " + relativePath);
+        
+        // Create target file path maintaining directory structure
+        Path relativeDir = relativePath.getParent();
+        Path targetDir = relativeDir != null ? targetRoot.resolve(relativeDir) : targetRoot;
+        Files.createDirectories(targetDir);
+        
+        Path targetFile = targetDir.resolve(sourceFile.getFileName());
+        
+        // Copy file as-is
+        Files.copy(sourceFile, targetFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        
+        System.out.printf("✓ %s -> %s (copied as-is)%n", 
+                relativePath, targetRoot.relativize(targetFile));
     }
 
     @SuppressWarnings("unchecked")
