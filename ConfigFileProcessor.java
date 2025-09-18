@@ -61,7 +61,7 @@ public class ConfigFileProcessor {
         // Create target directory if it doesn't exist
         Files.createDirectories(targetPath);
 
-                // Process all YAML files recursively in source directory and subdirectories
+        // Process all YAML files recursively in source directory and subdirectories
         Files.walk(sourcePath)
                 .filter(path -> Files.isRegularFile(path) && 
                        (path.toString().endsWith(".yml") || path.toString().endsWith(".yaml")))
@@ -215,8 +215,11 @@ public class ConfigFileProcessor {
                     } else if (value instanceof String) {
                         String stringValue = (String) value;
                         
-                        // Encrypt all string values
-                        if (shouldEncrypt(stringValue)) {
+                        // Check if this is Spring metadata that should not be encrypted
+                        if (isSpringMetadata(fullKey)) {
+                            System.out.println("    ℹ️ Skipping Spring metadata key: " + fullKey + " = " + stringValue);
+                            result.put(key, value); // Keep original value without encryption
+                        } else if (shouldEncrypt(stringValue)) {
                             try {
                                 result.put(key, encryptionService.encrypt(stringValue));
                             } catch (Exception encryptError) {
@@ -229,24 +232,36 @@ public class ConfigFileProcessor {
                             result.put(key, value);
                         }
                     } else if (value instanceof Boolean) {
-                        // Convert boolean to string and encrypt it
-                        try {
-                            String booleanAsString = String.valueOf(value); // Use String.valueOf instead of toString for null safety
-                            result.put(key, encryptionService.encrypt(booleanAsString));
-                        } catch (Exception encryptError) {
-                            System.err.println("  ❌ Encryption failed for boolean key '" + fullKey + "' with value: " + value);
-                            System.err.println("     Error: " + encryptError.getMessage());
-                            result.put(key, value);
+                        // Check if this is Spring metadata that should not be encrypted
+                        if (isSpringMetadata(fullKey)) {
+                            System.out.println("    ℹ️ Skipping Spring metadata key: " + fullKey + " = " + value);
+                            result.put(key, value); // Keep original boolean value
+                        } else {
+                            // Convert boolean to string and encrypt it
+                            try {
+                                String booleanAsString = String.valueOf(value); // Use String.valueOf instead of toString for null safety
+                                result.put(key, encryptionService.encrypt(booleanAsString));
+                            } catch (Exception encryptError) {
+                                System.err.println("  ❌ Encryption failed for boolean key '" + fullKey + "' with value: " + value);
+                                System.err.println("     Error: " + encryptError.getMessage());
+                                result.put(key, value);
+                            }
                         }
                     } else if (value instanceof Number) {
-                        // Convert numbers to string and encrypt them
-                        try {
-                            String numberAsString = String.valueOf(value); // Use String.valueOf instead of toString for null safety
-                            result.put(key, encryptionService.encrypt(numberAsString));
-                        } catch (Exception encryptError) {
-                            System.err.println("  ❌ Encryption failed for number key '" + fullKey + "' with value: " + value);
-                            System.err.println("     Error: " + encryptError.getMessage());
-                            result.put(key, value);
+                        // Check if this is Spring metadata that should not be encrypted
+                        if (isSpringMetadata(fullKey)) {
+                            System.out.println("    ℹ️ Skipping Spring metadata key: " + fullKey + " = " + value);
+                            result.put(key, value); // Keep original number value
+                        } else {
+                            // Convert numbers to string and encrypt them
+                            try {
+                                String numberAsString = String.valueOf(value); // Use String.valueOf instead of toString for null safety
+                                result.put(key, encryptionService.encrypt(numberAsString));
+                            } catch (Exception encryptError) {
+                                System.err.println("  ❌ Encryption failed for number key '" + fullKey + "' with value: " + value);
+                                System.err.println("     Error: " + encryptError.getMessage());
+                                result.put(key, value);
+                            }
                         }
                     } else {
                         // Keep other values as-is
@@ -292,8 +307,11 @@ public class ConfigFileProcessor {
                 } else if (item instanceof String) {
                     String stringValue = (String) item;
                     
-                    // Encrypt all string values in arrays
-                    if (shouldEncrypt(stringValue)) {
+                    // Check if this is Spring metadata that should not be encrypted
+                    if (isSpringMetadata(itemKey)) {
+                        System.out.println("    ℹ️ Skipping Spring metadata array item: " + itemKey + " = " + stringValue);
+                        result.add(item); // Keep original value without encryption
+                    } else if (shouldEncrypt(stringValue)) {
                         try {
                             result.add(encryptionService.encrypt(stringValue));
                         } catch (Exception encryptError) {
@@ -305,24 +323,36 @@ public class ConfigFileProcessor {
                         result.add(item);
                     }
                 } else if (item instanceof Boolean) {
-                    // Convert boolean to string and encrypt it
-                    try {
-                        String booleanAsString = String.valueOf(item); // Use String.valueOf instead of toString for null safety
-                        result.add(encryptionService.encrypt(booleanAsString));
-                    } catch (Exception encryptError) {
-                        System.err.println("  ❌ Encryption failed for boolean array item '" + itemKey + "' with value: " + item);
-                        System.err.println("     Error: " + encryptError.getMessage());
-                        result.add(item);
+                    // Check if this is Spring metadata that should not be encrypted
+                    if (isSpringMetadata(itemKey)) {
+                        System.out.println("    ℹ️ Skipping Spring metadata array item: " + itemKey + " = " + item);
+                        result.add(item); // Keep original boolean value
+                    } else {
+                        // Convert boolean to string and encrypt it
+                        try {
+                            String booleanAsString = String.valueOf(item); // Use String.valueOf instead of toString for null safety
+                            result.add(encryptionService.encrypt(booleanAsString));
+                        } catch (Exception encryptError) {
+                            System.err.println("  ❌ Encryption failed for boolean array item '" + itemKey + "' with value: " + item);
+                            System.err.println("     Error: " + encryptError.getMessage());
+                            result.add(item);
+                        }
                     }
                 } else if (item instanceof Number) {
-                    // Convert numbers to string and encrypt them
-                    try {
-                        String numberAsString = String.valueOf(item); // Use String.valueOf instead of toString for null safety
-                        result.add(encryptionService.encrypt(numberAsString));
-                    } catch (Exception encryptError) {
-                        System.err.println("  ❌ Encryption failed for number array item '" + itemKey + "' with value: " + item);
-                        System.err.println("     Error: " + encryptError.getMessage());
-                        result.add(item);
+                    // Check if this is Spring metadata that should not be encrypted
+                    if (isSpringMetadata(itemKey)) {
+                        System.out.println("    ℹ️ Skipping Spring metadata array item: " + itemKey + " = " + item);
+                        result.add(item); // Keep original number value
+                    } else {
+                        // Convert numbers to string and encrypt them
+                        try {
+                            String numberAsString = String.valueOf(item); // Use String.valueOf instead of toString for null safety
+                            result.add(encryptionService.encrypt(numberAsString));
+                        } catch (Exception encryptError) {
+                            System.err.println("  ❌ Encryption failed for number array item '" + itemKey + "' with value: " + item);
+                            System.err.println("     Error: " + encryptError.getMessage());
+                            result.add(item);
+                        }
                     }
                 } else {
                     // Keep other values as-is
@@ -356,6 +386,62 @@ public class ConfigFileProcessor {
         
         // ENCRYPT ALL NON-EMPTY STRING VALUES (including URLs)
         return true;
+    }
+    
+    /**
+     * Check if a configuration key represents Spring metadata that should not be encrypted
+     * @param fullKey The complete key path (e.g. "spring.config.activate.on-profile")
+     * @return true if the key should be excluded from encryption
+     */
+    private boolean isSpringMetadata(String fullKey) {
+        if (fullKey == null || fullKey.isEmpty()) {
+            return false;
+        }
+        
+        String key = fullKey.toLowerCase();
+        
+        // Spring Framework METADATA keys that should NOT be encrypted
+        // These are configuration keys that Spring needs to read directly for framework operation
+        return 
+               // Spring application metadata
+               key.equals("spring.application.name") ||
+               key.startsWith("spring.config.") ||           // Profile activation, imports, etc.
+               key.equals("spring.config.activate.on-profile") ||  // Profile activation
+               key.startsWith("spring.profiles.") ||         // Profile configuration
+               
+               // Server configuration that Spring reads directly
+               key.startsWith("server.port") ||
+               key.startsWith("server.servlet.context-path") ||
+               key.startsWith("server.ssl.enabled") ||
+               
+               // Management/Actuator endpoints
+               key.startsWith("management.") ||              // All actuator management
+               
+               // Logging configuration
+               key.startsWith("logging.level.") ||           // Logging levels
+               key.startsWith("logging.config") ||
+               key.startsWith("logging.file.name") ||
+               
+               // Service discovery metadata
+               key.startsWith("eureka.instance.hostname") ||
+               key.startsWith("eureka.instance.port") ||
+               key.startsWith("eureka.client.service-url") ||
+               
+               // Feature flags and boolean configurations that control behavior
+               key.equals("debug") ||                       // Debug flag
+               key.equals("trace") ||                       // Trace flag
+               key.endsWith(".enabled") ||                  // Feature toggles (*.enabled)
+               
+               // Health check and info endpoints
+               key.contains(".actuator.") ||                // Actuator specific config
+               key.contains(".health.") ||                  // Health check config
+               key.contains(".metrics.") ||                 // Metrics config
+               key.contains(".info.") ||                    // Application info
+               
+               // Timeout values that need to be read by Spring for configuration
+               key.equals("spring.config.timeout") ||
+               key.equals("spring.cloud.config.request-connect-timeout") ||
+               key.equals("spring.cloud.config.request-read-timeout");
     }
     
     /**
