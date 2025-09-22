@@ -178,6 +178,27 @@ class ConfigRefactor:
                     content = re.sub(setter_pattern, setter_replacement, content)
                     updated = True
         
+        # Update field references in toString method - use key_mapping properly
+        for original_key, obfuscated_key in self.key_mapping.items():
+            if original_key != obfuscated_key:
+                # Update toString method references - handle each field reference
+                tostring_pattern = f'("{re.escape(original_key)}\'\\s*\\+\\s*){re.escape(original_key)}(\\s*[,+])'
+                tostring_replacement = f'\\1{obfuscated_key}\\2'
+                matches = re.findall(tostring_pattern, content)
+                if matches:
+                    print(f"    Found {len(matches)} toString references to update: {original_key} -> {obfuscated_key}")
+                    content = re.sub(tostring_pattern, tostring_replacement, content)
+                    updated = True
+                
+                # Handle the last field reference in toString (no trailing comma)
+                tostring_last_pattern = f'("{re.escape(original_key)}\'\\s*\\+\\s*){re.escape(original_key)}(\'\\s*\\+)'
+                tostring_last_replacement = f'\\1{obfuscated_key}\\2'
+                matches = re.findall(tostring_last_pattern, content)
+                if matches:
+                    print(f"    Found {len(matches)} toString last references to update: {original_key} -> {obfuscated_key}")
+                    content = re.sub(tostring_last_pattern, tostring_last_replacement, content)
+                    updated = True
+        
         if updated and content != original_content:
             try:
                 with open(file_path, 'w', encoding='utf-8') as file:
@@ -237,56 +258,54 @@ class ConfigRefactor:
                 obfuscated_method_key = obfuscated_key.capitalize()
                 
                 # Update getter method calls
-                # Handle: object.getMethod()
-                original_getter = f'\\.get{original_method_key}\\(\\)'
+                # Handle: object.getMethod() - more comprehensive pattern matching
+                # This pattern matches getter calls regardless of what comes before them
+                original_getter_pattern = f'\\.get{re.escape(original_method_key)}\\(\\)'
                 obfuscated_getter = f'.get{obfuscated_method_key}()'
                 
                 # Count matches before replacement
-                matches = re.findall(original_getter, content)
+                matches = re.findall(original_getter_pattern, content)
                 if matches:
                     print(f"    Found {len(matches)} getter method calls to update: get{original_method_key} -> get{obfuscated_method_key}")
                     method_calls_updated += len(matches)
+                    content = re.sub(original_getter_pattern, obfuscated_getter, content)
+                    updated = True
                 
-                content = re.sub(original_getter, obfuscated_getter, content)
-                
-                # Also handle calls without the dot (in case it's at the beginning of a line or after whitespace)
-                original_getter_no_dot = f'get{original_method_key}\\(\\)'
+                # Also handle getter calls that might be at the beginning of a line or after certain characters
+                # This pattern matches getter calls that are not preceded by a dot
+                original_getter_pattern_no_dot = f'(?<!\\.)\\bget{re.escape(original_method_key)}\\(\\)'
                 obfuscated_getter_no_dot = f'get{obfuscated_method_key}()'
                 
-                # Only replace if it's not already preceded by a dot (to avoid double replacement)
-                matches_no_dot = re.findall(f'(?<!\\.)get{original_method_key}\\(\\)', content)
+                matches_no_dot = re.findall(original_getter_pattern_no_dot, content)
                 if matches_no_dot:
-                    print(f"    Found {len(matches_no_dot)} getter method calls without dot to update: get{original_method_key} -> get{obfuscated_method_key}")
+                    print(f"    Found {len(matches_no_dot)} getter method calls without dot prefix to update: get{original_method_key} -> get{obfuscated_method_key}")
                     method_calls_updated += len(matches_no_dot)
-                
-                content = re.sub(f'(?<!\\.)get{original_method_key}\\(\\)', obfuscated_getter_no_dot, content)
+                    content = re.sub(original_getter_pattern_no_dot, obfuscated_getter_no_dot, content)
+                    updated = True
                 
                 # Update setter method calls
-                # Handle: object.setMethod(value)
-                original_setter = f'\\.set{original_method_key}\\('
+                # Handle: object.setMethod(value) - more comprehensive pattern matching
+                original_setter_pattern = f'\\.set{re.escape(original_method_key)}\\('
                 obfuscated_setter = f'.set{obfuscated_method_key}('
                 
                 # Count matches before replacement
-                matches_setter = re.findall(original_setter, content)
+                matches_setter = re.findall(original_setter_pattern, content)
                 if matches_setter:
                     print(f"    Found {len(matches_setter)} setter method calls to update: set{original_method_key} -> set{obfuscated_method_key}")
                     method_calls_updated += len(matches_setter)
+                    content = re.sub(original_setter_pattern, obfuscated_setter, content)
+                    updated = True
                 
-                content = re.sub(original_setter, obfuscated_setter, content)
-                
-                # Also handle calls without the dot
-                original_setter_no_dot = f'set{original_method_key}\\('
+                # Also handle setter calls that might be at the beginning of a line or after certain characters
+                # This pattern matches setter calls that are not preceded by a dot
+                original_setter_pattern_no_dot = f'(?<!\\.)\\bset{re.escape(original_method_key)}\\('
                 obfuscated_setter_no_dot = f'set{obfuscated_method_key}('
                 
-                matches_setter_no_dot = re.findall(f'(?<!\\.)set{original_method_key}\\(', content)
+                matches_setter_no_dot = re.findall(original_setter_pattern_no_dot, content)
                 if matches_setter_no_dot:
-                    print(f"    Found {len(matches_setter_no_dot)} setter method calls without dot to update: set{original_method_key} -> set{obfuscated_method_key}")
+                    print(f"    Found {len(matches_setter_no_dot)} setter method calls without dot prefix to update: set{original_method_key} -> set{obfuscated_method_key}")
                     method_calls_updated += len(matches_setter_no_dot)
-                
-                content = re.sub(f'(?<!\\.)set{original_method_key}\\(', obfuscated_setter_no_dot, content)
-                
-                # Check if any updates were made
-                if matches or matches_no_dot or matches_setter or matches_setter_no_dot:
+                    content = re.sub(original_setter_pattern_no_dot, obfuscated_setter_no_dot, content)
                     updated = True
         
         if method_calls_updated > 0:
