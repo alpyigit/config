@@ -102,7 +102,7 @@ class ConfigRefactor:
     
     def update_java_file(self, file_path: str):
         """
-        Update a Java file to use obfuscated field names.
+        Update a Java file to use obfuscated field names and method signatures.
         """
         try:
             with open(file_path, 'r', encoding='utf-8') as file:
@@ -114,63 +114,69 @@ class ConfigRefactor:
         original_content = content
         updated = False
         
-        # Look for field declarations and their getters/setters
-        # Pattern: private Type fieldName;
-        field_pattern = r'private\s+\w+\s+(\w+);'
-        fields = re.findall(field_pattern, content)
-        
-        print(f"    Found {len(fields)} field declarations: {fields}")
-        
-        # Create a reverse mapping from obfuscated names to original names
-        reverse_mapping = {v: k for k, v in self.key_mapping.items()}
-        
-        for field in fields:
-            # Check if this field has an obfuscated name
-            original_name = reverse_mapping.get(field)
-            if original_name and original_name != field:
-                print(f"    Updating field '{original_name}' to '{field}'")
+        # Update field names from original to obfuscated
+        for original_key, obfuscated_key in self.key_mapping.items():
+            if original_key != obfuscated_key:
+                # Update field declarations: private Type originalKey; -> private Type obfuscatedKey;
+                field_pattern = f'(private\\s+\\w+\\s+){re.escape(original_key)}(\\s*;)'
+                field_replacement = f'\\1{obfuscated_key}\\2'
+                matches = re.findall(field_pattern, content)
+                if matches:
+                    print(f"    Found {len(matches)} field declarations to update: {original_key} -> {obfuscated_key}")
+                    content = re.sub(field_pattern, field_replacement, content)
+                    updated = True
                 
-                # Update getter method implementation
-                content = re.sub(
-                    f'return\\s+{re.escape(original_name)};',
-                    f'return {field};',
-                    content
-                )
+                # Update field references in getter method implementations
+                getter_ref_pattern = f'(return\\s+){re.escape(original_key)}(\\s*;)'
+                getter_ref_replacement = f'\\1{obfuscated_key}\\2'
+                matches = re.findall(getter_ref_pattern, content)
+                if matches:
+                    print(f"    Found {len(matches)} getter references to update: {original_key} -> {obfuscated_key}")
+                    content = re.sub(getter_ref_pattern, getter_ref_replacement, content)
+                    updated = True
                 
-                # Update setter method implementation - fix the parameter name
-                content = re.sub(
-                    f'this\\.{re.escape(original_name)}\\s*=\\s*{re.escape(original_name)};',
-                    f'this.{field} = {field};',
-                    content
-                )
+                # Update field references in setter method implementations
+                setter_ref_pattern = f'(this\\.){re.escape(original_key)}(\\s*=\\s*){re.escape(original_key)}(\\s*;)'
+                setter_ref_replacement = f'\\1{obfuscated_key}\\2{obfuscated_key}\\3'
+                matches = re.findall(setter_ref_pattern, content)
+                if matches:
+                    print(f"    Found {len(matches)} setter references to update: {original_key} -> {obfuscated_key}")
+                    content = re.sub(setter_ref_pattern, setter_ref_replacement, content)
+                    updated = True
                 
-                updated = True
-                print(f"    Updated field '{original_name}' to '{field}' in {os.path.basename(file_path)}")
+                # Update setter method parameter names
+                param_pattern = f'({original_key}\\s*\\))'
+                param_replacement = f'{obfuscated_key})'
+                matches = re.findall(param_pattern, content)
+                if matches:
+                    print(f"    Found {len(matches)} parameter names to update: {original_key} -> {obfuscated_key}")
+                    content = re.sub(param_pattern, param_replacement, content)
+                    updated = True
         
-        # Update method signatures
-        # We need to be more careful here to avoid incorrect replacements
-        # Let's process each mapping individually
+        # Update method signatures from original to obfuscated
         for original_key, obfuscated_key in self.key_mapping.items():
             if original_key != obfuscated_key:
                 # Capitalize the first letter for method names
                 original_method_key = original_key.capitalize()
                 obfuscated_method_key = obfuscated_key.capitalize()
                 
-                # Update getter method signature
-                original_getter = f'get{original_method_key}\\(\\)'
-                obfuscated_getter = f'get{obfuscated_method_key}()'
-                matches = re.findall(original_getter, content)
+                # Update getter method signatures
+                getter_pattern = f'(get){re.escape(original_method_key)}(\\s*\\()'
+                getter_replacement = f'\\1{obfuscated_method_key}\\2'
+                matches = re.findall(getter_pattern, content)
                 if matches:
                     print(f"    Found {len(matches)} getter method signatures to update: get{original_method_key} -> get{obfuscated_method_key}")
-                content = re.sub(original_getter, obfuscated_getter, content)
+                    content = re.sub(getter_pattern, getter_replacement, content)
+                    updated = True
                 
-                # Update setter method signature
-                original_setter = f'set{original_method_key}\\('
-                obfuscated_setter = f'set{obfuscated_method_key}('
-                matches = re.findall(original_setter, content)
+                # Update setter method signatures
+                setter_pattern = f'(set){re.escape(original_method_key)}(\\s*\\()'
+                setter_replacement = f'\\1{obfuscated_method_key}\\2'
+                matches = re.findall(setter_pattern, content)
                 if matches:
                     print(f"    Found {len(matches)} setter method signatures to update: set{original_method_key} -> set{obfuscated_method_key}")
-                content = re.sub(original_setter, obfuscated_setter, content)
+                    content = re.sub(setter_pattern, setter_replacement, content)
+                    updated = True
         
         if updated and content != original_content:
             try:
