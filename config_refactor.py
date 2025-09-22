@@ -20,13 +20,35 @@ class ConfigRefactor:
     def load_mapping(self) -> Dict[str, str]:
         """
         Load the key mapping from the mapping file.
+        For project-specific refactoring, load the project-specific mapping file.
         """
-        if not os.path.exists(self.mapping_file):
-            print(f"Mapping file not found: {self.mapping_file}")
-            return {}
-            
-        with open(self.mapping_file, 'r', encoding='utf-8') as file:
-            return yaml.safe_load(file) or {}
+        # Try to load project-specific mapping file first
+        project_name = None
+        if hasattr(self, 'current_project'):
+            project_name = self.current_project
+        else:
+            # Try to determine project name from current directory
+            current_dir = os.getcwd()
+            for item in os.listdir(current_dir):
+                if item.endswith('-key-mapping.yaml'):
+                    project_name = item.replace('-key-mapping.yaml', '')
+                    break
+        
+        if project_name:
+            project_mapping_file = os.path.join(self.project_root, f"{project_name}-key-mapping.yaml")
+            if os.path.exists(project_mapping_file):
+                print(f"Loading project-specific mapping from {project_mapping_file}")
+                with open(project_mapping_file, 'r', encoding='utf-8') as file:
+                    return yaml.safe_load(file) or {}
+        
+        # Fallback to global mapping file
+        if os.path.exists(self.mapping_file):
+            print(f"Loading global mapping from {self.mapping_file}")
+            with open(self.mapping_file, 'r', encoding='utf-8') as file:
+                return yaml.safe_load(file) or {}
+        
+        print(f"Mapping file not found: {self.mapping_file}")
+        return {}
     
     def find_configuration_classes(self, project_dir: str) -> List[str]:
         """
@@ -244,24 +266,25 @@ class ConfigRefactor:
     
     def process_all_projects(self):
         """
-        Process all Maven projects in the workspace.
+        Process all projects in the workspace generically.
         """
         if not self.key_mapping:
             print("No key mapping found. Run the obfuscator first.")
             return
             
-        # Automatically discover all Maven projects in the project root
+        # Automatically discover all directories in the project root
         # Exclude config-repo and config-server
-        excluded_dirs = ["config-repo", "config-server", ".git", ".idea", "__pycache__", "node_modules"]
+        excluded_dirs = ["config-repo", "config-server", ".git", ".idea", "__pycache__", "node_modules", "backup"]
         projects = []
         
         for item in os.listdir(self.project_root):
             item_path = os.path.join(self.project_root, item)
             # Check if it's a directory and not in the excluded list
             if os.path.isdir(item_path) and item not in excluded_dirs:
-                # Check if it's a Maven project by looking for pom.xml file
+                # Check if it's a project by looking for src directory and pom.xml
+                src_dir = os.path.join(item_path, "src")
                 pom_file = os.path.join(item_path, "pom.xml")
-                if os.path.exists(pom_file):
+                if os.path.exists(src_dir) and os.path.exists(pom_file):
                     projects.append(item)
         
         # Sort projects for consistent processing order
@@ -277,6 +300,15 @@ class ConfigRefactor:
             project_dir = os.path.join(self.project_root, project)
             if os.path.exists(project_dir):
                 print(f"Processing {project}...")
+                # Set current project for mapping file selection
+                self.current_project = project
+                # Reload mapping for this project
+                self.key_mapping = self.load_mapping()
+                
+                if not self.key_mapping:
+                    print(f"  No key mapping found for {project}, skipping...")
+                    continue
+                    
                 self.update_configuration_properties(project_dir)
                 self.update_all_java_files(project_dir)
             else:
@@ -288,7 +320,11 @@ def main():
     refactor = ConfigRefactor(project_root)
     
     print("Starting configuration refactoring...")
+    
+    # Process all projects generically
+    print("Processing all Maven projects...")
     refactor.process_all_projects()
+    
     print("Refactoring complete.")
 
 
