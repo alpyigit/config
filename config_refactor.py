@@ -58,8 +58,11 @@ class ConfigRefactor:
         src_dir = os.path.join(project_dir, "src")
         
         if not os.path.exists(src_dir):
+            print(f"  Warning: src directory not found in {project_dir}")
             return config_files
             
+        print(f"  Searching for @ConfigurationProperties classes in {src_dir}...")
+        
         # Process all Java files in the src directory recursively
         for root, dirs, files in os.walk(src_dir):
             for file in files:
@@ -69,8 +72,9 @@ class ConfigRefactor:
                     try:
                         with open(file_path, 'r', encoding='utf-8') as f:
                             content = f.read()
-                            if '@ConfigurationProperties' in content and 'configurations' in content:
+                            if '@ConfigurationProperties' in content:
                                 config_files.append(file_path)
+                                print(f"    Found ConfigurationProperties class: {file_path}")
                     except Exception as e:
                         print(f"  Warning: Could not read {file_path}: {e}")
         
@@ -80,16 +84,20 @@ class ConfigRefactor:
         """
         Update ConfigurationProperties classes in a project.
         """
+        print(f"  Updating ConfigurationProperties in {project_dir}")
+        
         # Find all configuration classes automatically
         config_files = self.find_configuration_classes(project_dir)
         
         if not config_files:
+            print(f"  No ConfigurationProperties classes found in {project_dir}")
             return
             
         print(f"  Found {len(config_files)} configuration classes")
         
         # Process each configuration class
         for file_path in config_files:
+            print(f"  Processing configuration class: {file_path}")
             self.update_java_file(file_path)
     
     def update_java_file(self, file_path: str):
@@ -111,6 +119,8 @@ class ConfigRefactor:
         field_pattern = r'private\s+\w+\s+(\w+);'
         fields = re.findall(field_pattern, content)
         
+        print(f"    Found {len(fields)} field declarations: {fields}")
+        
         # Create a reverse mapping from obfuscated names to original names
         reverse_mapping = {v: k for k, v in self.key_mapping.items()}
         
@@ -118,6 +128,8 @@ class ConfigRefactor:
             # Check if this field has an obfuscated name
             original_name = reverse_mapping.get(field)
             if original_name and original_name != field:
+                print(f"    Updating field '{original_name}' to '{field}'")
+                
                 # Update getter method implementation
                 content = re.sub(
                     f'return\\s+{re.escape(original_name)};',
@@ -133,9 +145,11 @@ class ConfigRefactor:
                 )
                 
                 updated = True
-                print(f"  Updated field '{original_name}' to '{field}' in {os.path.basename(file_path)}")
+                print(f"    Updated field '{original_name}' to '{field}' in {os.path.basename(file_path)}")
         
         # Update method signatures
+        # We need to be more careful here to avoid incorrect replacements
+        # Let's process each mapping individually
         for original_key, obfuscated_key in self.key_mapping.items():
             if original_key != obfuscated_key:
                 # Capitalize the first letter for method names
@@ -145,25 +159,28 @@ class ConfigRefactor:
                 # Update getter method signature
                 original_getter = f'get{original_method_key}\\(\\)'
                 obfuscated_getter = f'get{obfuscated_method_key}()'
+                matches = re.findall(original_getter, content)
+                if matches:
+                    print(f"    Found {len(matches)} getter method signatures to update: get{original_method_key} -> get{obfuscated_method_key}")
                 content = re.sub(original_getter, obfuscated_getter, content)
                 
                 # Update setter method signature
                 original_setter = f'set{original_method_key}\\('
                 obfuscated_setter = f'set{obfuscated_method_key}('
+                matches = re.findall(original_setter, content)
+                if matches:
+                    print(f"    Found {len(matches)} setter method signatures to update: set{original_method_key} -> set{obfuscated_method_key}")
                 content = re.sub(original_setter, obfuscated_setter, content)
-                
-                # Update setter method parameter - fix the parameter name in method signature
-                setter_pattern = f'set{obfuscated_method_key}\\(\\s*\\w+\\s+({original_key})\\s*\\)'
-                obfuscated_setter_replacement = f'set{obfuscated_method_key}(\\1 {field})'
-                content = re.sub(setter_pattern, obfuscated_setter_replacement, content)
         
         if updated and content != original_content:
             try:
                 with open(file_path, 'w', encoding='utf-8') as file:
                     file.write(content)
-                print(f"  Updated {file_path}")
+                print(f"    Updated {file_path}")
             except Exception as e:
-                print(f"  Warning: Could not write to {file_path}: {e}")
+                print(f"    Warning: Could not write to {file_path}: {e}")
+        elif not updated:
+            print(f"    No updates needed for {file_path}")
     
     def update_all_java_files(self, project_dir: str):
         """
@@ -179,11 +196,16 @@ class ConfigRefactor:
             if os.path.exists(base_dir):
                 print(f"  Scanning {base_dir} for Java files...")
                 # Process all Java files in the directory recursively
+                java_files_count = 0
                 for root, dirs, files in os.walk(base_dir):
                     for file in files:
                         if file.endswith('.java'):
+                            java_files_count += 1
                             file_path = os.path.join(root, file)
                             self.update_java_method_calls(file_path)
+                print(f"  Scanned {java_files_count} Java files in {base_dir}")
+            else:
+                print(f"  Directory not found: {base_dir}")
     
     def update_java_method_calls(self, file_path: str):
         """
@@ -201,6 +223,7 @@ class ConfigRefactor:
         
         # Look for method calls on configuration objects
         # Pattern: configObject.getMethod() and configObject.setMethod(value)
+        method_calls_updated = 0
         for original_key, obfuscated_key in self.key_mapping.items():
             if original_key != obfuscated_key:
                 # Capitalize the first letter for method names
@@ -215,7 +238,8 @@ class ConfigRefactor:
                 # Count matches before replacement
                 matches = re.findall(original_getter, content)
                 if matches:
-                    print(f"  Found {len(matches)} getter method calls to update: get{original_method_key} -> get{obfuscated_method_key}")
+                    print(f"    Found {len(matches)} getter method calls to update: get{original_method_key} -> get{obfuscated_method_key}")
+                    method_calls_updated += len(matches)
                 
                 content = re.sub(original_getter, obfuscated_getter, content)
                 
@@ -226,7 +250,8 @@ class ConfigRefactor:
                 # Only replace if it's not already preceded by a dot (to avoid double replacement)
                 matches_no_dot = re.findall(f'(?<!\\.)get{original_method_key}\\(\\)', content)
                 if matches_no_dot:
-                    print(f"  Found {len(matches_no_dot)} getter method calls without dot to update: get{original_method_key} -> get{obfuscated_method_key}")
+                    print(f"    Found {len(matches_no_dot)} getter method calls without dot to update: get{original_method_key} -> get{obfuscated_method_key}")
+                    method_calls_updated += len(matches_no_dot)
                 
                 content = re.sub(f'(?<!\\.)get{original_method_key}\\(\\)', obfuscated_getter_no_dot, content)
                 
@@ -238,7 +263,8 @@ class ConfigRefactor:
                 # Count matches before replacement
                 matches_setter = re.findall(original_setter, content)
                 if matches_setter:
-                    print(f"  Found {len(matches_setter)} setter method calls to update: set{original_method_key} -> set{obfuscated_method_key}")
+                    print(f"    Found {len(matches_setter)} setter method calls to update: set{original_method_key} -> set{obfuscated_method_key}")
+                    method_calls_updated += len(matches_setter)
                 
                 content = re.sub(original_setter, obfuscated_setter, content)
                 
@@ -248,7 +274,8 @@ class ConfigRefactor:
                 
                 matches_setter_no_dot = re.findall(f'(?<!\\.)set{original_method_key}\\(', content)
                 if matches_setter_no_dot:
-                    print(f"  Found {len(matches_setter_no_dot)} setter method calls without dot to update: set{original_method_key} -> set{obfuscated_method_key}")
+                    print(f"    Found {len(matches_setter_no_dot)} setter method calls without dot to update: set{original_method_key} -> set{obfuscated_method_key}")
+                    method_calls_updated += len(matches_setter_no_dot)
                 
                 content = re.sub(f'(?<!\\.)set{original_method_key}\\(', obfuscated_setter_no_dot, content)
                 
@@ -256,13 +283,18 @@ class ConfigRefactor:
                 if matches or matches_no_dot or matches_setter or matches_setter_no_dot:
                     updated = True
         
+        if method_calls_updated > 0:
+            print(f"    Updated {method_calls_updated} method calls in {file_path}")
+        
         if updated and content != original_content:
             try:
                 with open(file_path, 'w', encoding='utf-8') as file:
                     file.write(content)
-                print(f"  Updated {file_path}")
+                print(f"    Updated {file_path}")
             except Exception as e:
-                print(f"  Warning: Could not write to {file_path}: {e}")
+                print(f"    Warning: Could not write to {file_path}: {e}")
+        elif not updated:
+            print(f"    No method call updates needed for {file_path}")
     
     def process_all_projects(self):
         """
@@ -272,28 +304,54 @@ class ConfigRefactor:
             print("No key mapping found. Run the obfuscator first.")
             return
             
+        print(f"Searching for projects in {self.project_root}")
+        
         # Automatically discover all directories in the project root
         # Exclude config-repo and config-server
         excluded_dirs = ["config-repo", "config-server", ".git", ".idea", "__pycache__", "node_modules", "backup"]
         projects = []
         
+        print("Scanning directories...")
         for item in os.listdir(self.project_root):
             item_path = os.path.join(self.project_root, item)
+            print(f"  Checking {item}...")
+            
             # Check if it's a directory and not in the excluded list
             if os.path.isdir(item_path) and item not in excluded_dirs:
+                print(f"    {item} is a directory and not in excluded list")
+                
                 # Check if it's a project by looking for src directory and pom.xml
                 src_dir = os.path.join(item_path, "src")
                 pom_file = os.path.join(item_path, "pom.xml")
-                if os.path.exists(src_dir) and os.path.exists(pom_file):
+                
+                src_exists = os.path.exists(src_dir)
+                pom_exists = os.path.exists(pom_file)
+                
+                print(f"    src directory exists: {src_exists}")
+                print(f"    pom.xml exists: {pom_exists}")
+                
+                if src_exists and pom_exists:
                     projects.append(item)
+                    print(f"    Added {item} to projects list")
+                else:
+                    print(f"    Skipping {item} - missing src directory or pom.xml")
+            else:
+                print(f"    Skipping {item} - not a directory or in excluded list")
         
         # Sort projects for consistent processing order
         projects.sort()
         
         if not projects:
             print("No Maven projects found in the workspace.")
-            return
-            
+            # Let's also check for any directories with src but without pom.xml
+            print("Checking for directories with src but without pom.xml...")
+            for item in os.listdir(self.project_root):
+                item_path = os.path.join(self.project_root, item)
+                if os.path.isdir(item_path) and item not in excluded_dirs:
+                    src_dir = os.path.join(item_path, "src")
+                    if os.path.exists(src_dir):
+                        print(f"  Found directory with src but no pom.xml: {item}")
+        
         print(f"Found {len(projects)} Maven projects: {', '.join(projects)}")
         
         for project in projects:
