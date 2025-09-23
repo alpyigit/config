@@ -96,8 +96,16 @@ public class ConfigFileProcessor {
             return;
         }
 
-        // Read source YAML file
-        Map<String, Object> config = yamlMapper.readValue(sourceFile.toFile(), Map.class);
+        // Try to read and parse the YAML file
+        Map<String, Object> config;
+        try {
+            config = yamlMapper.readValue(sourceFile.toFile(), Map.class);
+        } catch (Exception e) {
+            // If YAML parsing fails, copy the file as-is
+            System.out.println("Warning: Could not parse YAML file " + relativePath + ". Copying as-is. Error: " + e.getMessage());
+            copyEmptyYamlFile(sourceFile, sourceRoot, targetRoot);
+            return;
+        }
         
         // Check if the file contains no actual configuration (empty map)
         if (config.isEmpty()) {
