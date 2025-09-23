@@ -89,8 +89,22 @@ public class ConfigFileProcessor {
         Path relativePath = sourceRoot.relativize(sourceFile);
         System.out.println("Processing: " + relativePath);
 
+        // Check if the file is empty
+        if (Files.size(sourceFile) == 0) {
+            // Copy empty file as-is
+            copyEmptyYamlFile(sourceFile, sourceRoot, targetRoot);
+            return;
+        }
+
         // Read source YAML file
         Map<String, Object> config = yamlMapper.readValue(sourceFile.toFile(), Map.class);
+        
+        // Check if the file contains no actual configuration (empty map)
+        if (config.isEmpty()) {
+            // Copy empty configuration file as-is
+            copyEmptyYamlFile(sourceFile, sourceRoot, targetRoot);
+            return;
+        }
 
         // Shuffle keys and create mapping
         Map<String, Object> shuffledConfig = shuffleKeysRecursively(config, "");
@@ -117,6 +131,28 @@ public class ConfigFileProcessor {
 
         System.out.printf("✓ %s -> %s (Encrypted: %d/%d values)%n", 
                 relativePath, targetRoot.relativize(targetFile), stats.encryptedCount, stats.totalValues);
+    }
+
+    private void copyEmptyYamlFile(Path sourceFile, Path sourceRoot, Path targetRoot) throws IOException {
+        // Calculate relative path from source root
+        Path relativePath = sourceRoot.relativize(sourceFile);
+        
+        // Create target file path maintaining directory structure
+        String fileName = sourceFile.getFileName().toString();
+        String encryptedFileName = fileName.replace(".yml", "-encrypted.yml").replace(".yaml", "-encrypted.yaml");
+        
+        // Get the relative directory path and create it in target
+        Path relativeDir = relativePath.getParent();
+        Path targetDir = relativeDir != null ? targetRoot.resolve(relativeDir) : targetRoot;
+        Files.createDirectories(targetDir);
+        
+        Path targetFile = targetDir.resolve(encryptedFileName);
+        
+        // Copy the empty file as-is
+        Files.copy(sourceFile, targetFile);
+        
+        System.out.printf("✓ %s -> %s (Empty file copied)%n", 
+                relativePath, targetRoot.relativize(targetFile));
     }
 
     @SuppressWarnings("unchecked")
