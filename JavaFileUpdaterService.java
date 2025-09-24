@@ -268,10 +268,15 @@ public class JavaFileUpdaterService {
                 if (!originalKey.contains(".")) {
                     // Update configProperties.getOriginalKey() -> configProperties.getShuffledKey()
                     // Handle multi-line formatting where configProperties. might be on a different line
-                    String originalMethodCall = "configProperties\\s*\\.\\s*" + "get" + capitalizeFirstLetter(originalKey) + "\\s*\\(";
-                    // Use regex replacement to handle multi-line formatting
-                    content = content.replaceAll(originalMethodCall, "configProperties." + "get" + capitalizeFirstLetter(shuffledKey) + "(");
-                    System.out.println("  Updated method call for key: " + originalKey + " -> " + shuffledKey);
+                    String originalGetMethodCall = "configProperties\\s*\\.\\s*" + "get" + capitalizeFirstLetter(originalKey) + "\\s*\\(";
+                    content = content.replaceAll(originalGetMethodCall, "configProperties." + "get" + capitalizeFirstLetter(shuffledKey) + "(");
+                    
+                    // Update configProperties.setOriginalKey() -> configProperties.setShuffledKey()
+                    // Handle multi-line formatting where configProperties. might be on a different line
+                    String originalSetMethodCall = "configProperties\\s*\\.\\s*" + "set" + capitalizeFirstLetter(originalKey) + "\\s*\\(";
+                    content = content.replaceAll(originalSetMethodCall, "configProperties." + "set" + capitalizeFirstLetter(shuffledKey) + "(");
+                    
+                    System.out.println("  Updated method calls for key: " + originalKey + " -> " + shuffledKey);
                 }
             }
         }
