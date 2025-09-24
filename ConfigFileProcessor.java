@@ -19,6 +19,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.IntStream;
+import java.util.Date;
+import java.util.Random;
 
 @Service
 public class ConfigFileProcessor {
@@ -28,6 +32,7 @@ public class ConfigFileProcessor {
 
     private final ObjectMapper yamlMapper;
     private final Yaml snakeYaml;
+    private Map<String, String> keyMapping = new ConcurrentHashMap<>();
 
     public ConfigFileProcessor() {
         YAMLFactory yamlFactory = new YAMLFactory();
@@ -44,9 +49,6 @@ public class ConfigFileProcessor {
         dumperOptions.setIndent(2);
         dumperOptions.setExplicitStart(false);
         dumperOptions.setExplicitEnd(false);
-        dumperOptions.setDefaultScalarStyle(DumperOptions.ScalarStyle.PLAIN);
-        // Don't print null values - this will preserve empty keys like "filters:"
-        dumperOptions.setNonPrintableStyle(DumperOptions.NonPrintableStyle.ESCAPE);
         
         LoaderOptions loaderOptions = new LoaderOptions();
         loaderOptions.setCodePointLimit(50 * 1024 * 1024); // 50MB limit
@@ -63,6 +65,9 @@ public class ConfigFileProcessor {
 
         // Create target directory if it doesn't exist
         Files.createDirectories(targetPath);
+
+        // Initialize key mapping
+        keyMapping.clear();
 
         // Process all YAML files recursively in source directory and subdirectories
         Files.walk(sourcePath)
@@ -92,9 +97,29 @@ public class ConfigFileProcessor {
                     }
                 });
 
+        // Save key mapping to file
+        saveKeyMapping(sourcePath.getParent(), sourcePath.getFileName().toString());
+
         System.out.println("Configuration encryption completed!");
         System.out.println("Source directory: " + sourceDir);
         System.out.println("Target directory: " + targetDir);
+    }
+
+    /**
+     * Save key mapping to a file in the parent directory
+     */
+    private void saveKeyMapping(Path parentDir, String repoName) throws IOException {
+        if (!keyMapping.isEmpty()) {
+            Path mappingFile = parentDir.resolve(repoName + "-key-mapping.yml");
+            Map<String, Object> mappingData = new LinkedHashMap<>();
+            mappingData.put("repository", repoName);
+            mappingData.put("generatedAt", new Date().toString());
+            mappingData.put("keyMapping", keyMapping);
+            
+            String yamlContent = snakeYaml.dump(mappingData);
+            Files.write(mappingFile, yamlContent.getBytes());
+            System.out.println("Key mapping saved to: " + mappingFile);
+        }
     }
 
     /**
@@ -224,78 +249,85 @@ public class ConfigFileProcessor {
                 String fullKey = parentKey.isEmpty() ? key : parentKey + "." + key;
                 currentKey = fullKey; // Track current key for error logging
 
+                // Shuffle the key
+                String shuffledKey = shuffleKey(key);
+                if (!key.equals(shuffledKey)) {
+                    keyMapping.put(key, shuffledKey);
+                    System.out.println("  🔀 Key shuffled: " + key + " -> " + shuffledKey);
+                }
+
                 try {
                     // Handle null values explicitly
                     if (value == null) {
-                        result.put(key, "");
+                        result.put(shuffledKey, null);
                         continue;
                     }
                     
                     if (value instanceof Map) {
                         // Recursively process nested maps
-                        result.put(key, encryptConfigRecursively((Map<String, Object>) value, fullKey));
+                        result.put(shuffledKey, encryptConfigRecursively((Map<String, Object>) value, fullKey));
                     } else if (value instanceof List) {
                         // Process arrays/lists
-                        result.put(key, encryptListRecursively((List<Object>) value, fullKey));
+                        result.put(shuffledKey, encryptListRecursively((List<Object>) value, fullKey));
                     } else if (value instanceof String) {
                         String stringValue = (String) value;
                         
                         // Check if this is Spring metadata that should not be encrypted
                         if (isSpringMetadata(fullKey)) {
                             System.out.println("    ℹ️ Skipping Spring metadata key: " + fullKey + " = " + stringValue);
-                            result.put(key, value); // Keep original value without encryption
+                            result.put(shuffledKey, value); // Keep original value without encryption
                         } else if (shouldEncrypt(stringValue)) {
                             try {
-                                result.put(key, encryptionService.encrypt(stringValue));
+                                result.put(shuffledKey, encryptionService.encrypt(stringValue));
                             } catch (Exception encryptError) {
                                 System.err.println("  ❌ Encryption failed for key '" + fullKey + "' with value: " + stringValue);
                                 System.err.println("     Error: " + encryptError.getMessage());
                                 // Keep original value on encryption failure
-                                result.put(key, value);
+                                result.put(shuffledKey, value);
                             }
                         } else {
-                            result.put(key, value);
+                            result.put(shuffledKey, value);
                         }
                     } else if (value instanceof Boolean) {
                         // Check if this is Spring metadata that should not be encrypted
                         if (isSpringMetadata(fullKey)) {
                             System.out.println("    ℹ️ Skipping Spring metadata key: " + fullKey + " = " + value);
-                            result.put(key, value); // Keep original boolean value
+                            result.put(shuffledKey, value); // Keep original boolean value
                         } else {
                             // Convert boolean to string and encrypt it
                             try {
                                 String booleanAsString = String.valueOf(value); // Use String.valueOf instead of toString for null safety
-                                result.put(key, encryptionService.encrypt(booleanAsString));
+                                result.put(shuffledKey, encryptionService.encrypt(booleanAsString));
                             } catch (Exception encryptError) {
                                 System.err.println("  ❌ Encryption failed for boolean key '" + fullKey + "' with value: " + value);
                                 System.err.println("     Error: " + encryptError.getMessage());
-                                result.put(key, value);
+                                result.put(shuffledKey, value);
                             }
                         }
                     } else if (value instanceof Number) {
                         // Check if this is Spring metadata that should not be encrypted
                         if (isSpringMetadata(fullKey)) {
                             System.out.println("    ℹ️ Skipping Spring metadata key: " + fullKey + " = " + value);
-                            result.put(key, value); // Keep original number value
+                            result.put(shuffledKey, value); // Keep original number value
                         } else {
                             // Convert numbers to string and encrypt them
                             try {
                                 String numberAsString = String.valueOf(value); // Use String.valueOf instead of toString for null safety
-                                result.put(key, encryptionService.encrypt(numberAsString));
+                                result.put(shuffledKey, encryptionService.encrypt(numberAsString));
                             } catch (Exception encryptError) {
                                 System.err.println("  ❌ Encryption failed for number key '" + fullKey + "' with value: " + value);
                                 System.err.println("     Error: " + encryptError.getMessage());
-                                result.put(key, value);
+                                result.put(shuffledKey, value);
                             }
                         }
                     } else {
                         // Keep other values as-is
-                        result.put(key, value);
+                        result.put(shuffledKey, value);
                     }
                 } catch (Exception keyProcessError) {
                     System.err.println("  ❌ Error processing key '" + fullKey + "': " + keyProcessError.getMessage());
                     // Keep original value on any processing error
-                    result.put(key, value);
+                    result.put(shuffledKey, value);
                 }
             }
         } catch (Exception generalError) {
@@ -319,7 +351,7 @@ public class ConfigFileProcessor {
             try {
                 // Handle null values explicitly
                 if (item == null) {
-                    result.add(""); // Keep null as null
+                    result.add(null); // Keep null as null
                     continue;
                 }
                 
@@ -393,6 +425,53 @@ public class ConfigFileProcessor {
         return result;
     }
 
+    /**
+     * Shuffle a key using a mapping approach instead of character shuffling
+     * @param key The original key
+     * @return The shuffled key
+     */
+    private String shuffleKey(String key) {
+        // If key is already in the mapping, return the mapped value
+        if (keyMapping.containsKey(key)) {
+            return keyMapping.get(key);
+        }
+        
+        // For single character keys, don't shuffle
+        if (key.length() <= 1) {
+            return key;
+        }
+        
+        // Use a deterministic mapping approach based on key hash
+        // This ensures the same key always maps to the same shuffled key
+        int hash = key.hashCode();
+        Random random = new Random(hash);
+        
+        // Generate a shuffled key using a predefined set of characters
+        // Avoiding underscores as requested
+        String chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        StringBuilder shuffled = new StringBuilder();
+        
+        // Create a unique pattern based on the hash
+        int length = Math.max(3, Math.min(20, key.length() + random.nextInt(5))); // Length between 3-20 chars
+        
+        for (int i = 0; i < length; i++) {
+            int index = random.nextInt(chars.length());
+            shuffled.append(chars.charAt(index));
+            // Re-seed random with a combination of hash and position for more variation
+            random.setSeed(hash + i * 31);
+        }
+        
+        String shuffledKey = shuffled.toString();
+        
+        // Ensure shuffled key is different from original
+        if (shuffledKey.equals(key)) {
+            // Add a character to make it different
+            shuffledKey = shuffledKey + "x";
+        }
+        
+        return shuffledKey;
+    }
+
     private boolean shouldEncrypt(String value) {
         // Don't encrypt already encrypted values
         if (encryptionService.isEncrypted(value)) {
@@ -441,7 +520,10 @@ public class ConfigFileProcessor {
                key.startsWith("ports") || 
                key.startsWith("opentracing") || 
                key.startsWith("services") || 
-               key.startsWith("management");
+               key.startsWith("management") ||
+               key.startsWith("subscribedtopics") ||
+               key.startsWith("feign") ||
+               key.startsWith("log4j2");
 
     }
     
@@ -488,7 +570,6 @@ public class ConfigFileProcessor {
                         
                         // Post-process to fix dot notation keys and preserve empty values
                         yamlContent = fixDotNotationKeys(yamlContent);
-                        yamlContent = preserveEmptyValues(yamlContent);
                         
                         writer.write(yamlContent);
                         if (!yamlContent.endsWith("\n")) {
@@ -633,20 +714,6 @@ public class ConfigFileProcessor {
         }
         
         return result.toString();
-    }
-
-    /**
-     * Preserve empty values in YAML by converting "key: null" to "key:"
-     */
-    private String preserveEmptyValues(String yamlContent) {
-        if (yamlContent == null || yamlContent.isEmpty()) {
-            return yamlContent;
-        }
-        
-        // Replace "key: null" patterns with "key:" to preserve empty structure
-        // This regex matches lines that end with ": null" (with optional whitespace)
-        return yamlContent.replaceAll("(\\w+):\\s+null(\\s*)$", "$1:$2")
-                          .replaceAll("(\\w+):\\s+null(\\s*)", "$1:$2");
     }
 
 }

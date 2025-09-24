@@ -1,6 +1,7 @@
 package com.example.configencryptor.service;
 
 import org.springframework.stereotype.Service;
+import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -8,6 +9,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -142,14 +144,8 @@ public class JavaFileUpdaterService {
         while (configPropsMatcher.find()) {
             String originalPrefix = configPropsMatcher.group(1);
             // Check if we have a mapping for this prefix
-            if (keyMapping.containsKey(originalPrefix)) {
-                String shuffledPrefix = keyMapping.get(originalPrefix);
-                configPropsMatcher.appendReplacement(sb, 
-                    "@ConfigurationProperties(prefix = \"" + shuffledPrefix + "\")");
-                System.out.println("  Updated prefix: " + originalPrefix + " -> " + shuffledPrefix);
-            } else {
-                configPropsMatcher.appendReplacement(sb, configPropsMatcher.group(0));
-            }
+            // Note: We don't shuffle prefixes, they remain the same
+            configPropsMatcher.appendReplacement(sb, configPropsMatcher.group(0));
         }
         configPropsMatcher.appendTail(sb);
         content = sb.toString();
@@ -163,7 +159,6 @@ public class JavaFileUpdaterService {
                 // Only process top-level keys (not nested ones like app.name)
                 if (!originalKey.contains(".")) {
                     // Update field declarations: private String originalKey; -> private String shuffledKey;
-                    // We need to be careful to only replace the field name, not other occurrences
                     content = content.replaceAll("(private\\s+\\w+\\s+)" + Pattern.quote(originalKey) + "\\s*;", "$1" + shuffledKey + ";");
                     if (!originalKey.equals(shuffledKey)) {
                         System.out.println("  Updated field declaration: " + originalKey + " -> " + shuffledKey);
@@ -184,13 +179,6 @@ public class JavaFileUpdaterService {
                         content = content.replace(originalSetter, shuffledSetter);
                         System.out.println("  Updated setter in @ConfigurationProperties class: " + originalSetter + " -> " + shuffledSetter);
                     }
-                    
-                    // Update constructor parameters and assignments
-                    // Update constructor parameter: public ClassName(String originalKey) -> public ClassName(String shuffledKey)
-                    content = content.replaceAll("\\b" + Pattern.quote(originalKey) + "\\b(?=\\s*[\\)\\,])", shuffledKey);
-                    
-                    // Update field assignments in constructors or methods
-                    content = content.replaceAll("\\bthis\\." + Pattern.quote(originalKey) + "\\b", "this." + shuffledKey);
                     
                     // Update field references in strings (like in logs or error messages)
                     if (!originalKey.equals(shuffledKey)) {
@@ -251,5 +239,33 @@ public class JavaFileUpdaterService {
         
         // Copy file, replacing if it already exists
         Files.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
+    }
+    
+    /**
+     * Load key mapping from a YAML file
+     * @param mappingFilePath Path to the key mapping YAML file
+     * @return Map of original keys to shuffled keys
+     * @throws IOException if there's an error reading the file
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, String> loadKeyMapping(String mappingFilePath) throws IOException {
+        Path path = Paths.get(mappingFilePath);
+        if (!Files.exists(path)) {
+            System.out.println("Key mapping file not found: " + mappingFilePath);
+            return new HashMap<>();
+        }
+        
+        String content = new String(Files.readAllBytes(path));
+        Yaml yaml = new Yaml();
+        Map<String, Object> data = yaml.load(content);
+        
+        if (data.containsKey("keyMapping") && data.get("keyMapping") instanceof Map) {
+            Map<String, String> keyMapping = (Map<String, String>) data.get("keyMapping");
+            System.out.println("Loaded " + keyMapping.size() + " key mappings from: " + mappingFilePath);
+            return keyMapping;
+        }
+        
+        System.out.println("No key mapping found in file: " + mappingFilePath);
+        return new HashMap<>();
     }
 }
