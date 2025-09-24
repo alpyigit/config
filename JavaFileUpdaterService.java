@@ -86,11 +86,43 @@ public class JavaFileUpdaterService {
                 .filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".java"))
                 .forEach(javaFile -> {
                     try {
-                        updateJavaFileWithShuffledKeys(javaFile, keyMapping);
+                        // Only update files that have @ConfigurationProperties or configProperties references
+                        if (shouldUpdateJavaFile(javaFile)) {
+                            updateJavaFileWithShuffledKeys(javaFile, keyMapping);
+                        }
                     } catch (IOException e) {
                         System.err.println("Failed to update Java file: " + javaFile + " - " + e.getMessage());
                     }
                 });
+    }
+
+    /**
+     * Checks if a Java file should be updated (contains @ConfigurationProperties or configProperties references)
+     * @param javaFile Path to the Java file
+     * @return true if the file should be updated, false otherwise
+     * @throws IOException if there's an error reading the file
+     */
+    private boolean shouldUpdateJavaFile(Path javaFile) throws IOException {
+        String content = new String(Files.readAllBytes(javaFile));
+        
+        // Check for @ConfigurationProperties annotation
+        if (content.contains("@ConfigurationProperties")) {
+            return true;
+        }
+        
+        // Check for configProperties references
+        if (content.contains("configProperties.")) {
+            return true;
+        }
+        
+        // Check for other common configuration-related patterns
+        if (content.contains("Environment.getProperty") || 
+            content.contains("Value(") || 
+            content.contains("@Value(")) {
+            return true;
+        }
+        
+        return false;
     }
 
     /**
@@ -102,6 +134,8 @@ public class JavaFileUpdaterService {
     private void updateJavaFileWithShuffledKeys(Path javaFile, Map<String, String> keyMapping) throws IOException {
         String content = new String(Files.readAllBytes(javaFile));
         String originalContent = content;
+        
+        System.out.println("Updating configuration-related Java file: " + javaFile.getFileName());
         
         // Update @ConfigurationProperties prefix values
         Pattern configPropsPattern = Pattern.compile("@ConfigurationProperties\\(prefix\\s*=\\s*\"([^\"]+)\"\\)");
@@ -115,7 +149,7 @@ public class JavaFileUpdaterService {
                 String shuffledPrefix = keyMapping.get(originalPrefix);
                 configPropsMatcher.appendReplacement(sb, 
                     "@ConfigurationProperties(prefix = \"" + shuffledPrefix + "\")");
-                System.out.println("Updated prefix in " + javaFile.getFileName() + ": " + originalPrefix + " -> " + shuffledPrefix);
+                System.out.println("  Updated prefix: " + originalPrefix + " -> " + shuffledPrefix);
             } else {
                 configPropsMatcher.appendReplacement(sb, configPropsMatcher.group(0));
             }
@@ -136,7 +170,7 @@ public class JavaFileUpdaterService {
                 String shuffledGetter = "get" + capitalizeFirstLetter(shuffledKey);
                 if (!originalGetter.equals(shuffledGetter)) {
                     content = content.replace(originalGetter, shuffledGetter);
-                    System.out.println("Updated getter in " + javaFile.getFileName() + ": " + originalGetter + " -> " + shuffledGetter);
+                    System.out.println("  Updated getter: " + originalGetter + " -> " + shuffledGetter);
                 }
                 
                 // Update setter method names: setOriginalKey -> setShuffledKey
@@ -144,13 +178,13 @@ public class JavaFileUpdaterService {
                 String shuffledSetter = "set" + capitalizeFirstLetter(shuffledKey);
                 if (!originalSetter.equals(shuffledSetter)) {
                     content = content.replace(originalSetter, shuffledSetter);
-                    System.out.println("Updated setter in " + javaFile.getFileName() + ": " + originalSetter + " -> " + shuffledSetter);
+                    System.out.println("  Updated setter: " + originalSetter + " -> " + shuffledSetter);
                 }
                 
                 // Update field references in strings (like in logs or error messages)
                 if (!originalKey.equals(shuffledKey)) {
                     content = content.replace("\"" + originalKey + "\"", "\"" + shuffledKey + "\"");
-                    System.out.println("Updated string reference in " + javaFile.getFileName() + ": \"" + originalKey + "\" -> \"" + shuffledKey + "\"");
+                    System.out.println("  Updated string reference: \"" + originalKey + "\" -> \"" + shuffledKey + "\"");
                 }
             }
         }
