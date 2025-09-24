@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -67,8 +68,8 @@ public class ConfigFileProcessor {
                     }
                 });
 
-        // Save key mapping to a file
-        saveKeyMapping(targetPath.resolve("key-mapping.properties").toFile());
+        // Save key mapping to files within each directory
+        saveKeyMappingsPerDirectory(sourcePath, targetPath);
 
         // Update client Java files with shuffled keys
         try {
@@ -80,7 +81,6 @@ public class ConfigFileProcessor {
         System.out.println("Configuration encryption completed!");
         System.out.println("Source directory: " + sourceDir);
         System.out.println("Target directory: " + targetDir);
-        System.out.println("Key mapping saved to: " + targetPath.resolve("key-mapping.properties"));
     }
 
     @SuppressWarnings("unchecked")
@@ -141,28 +141,6 @@ public class ConfigFileProcessor {
                 relativePath, targetRoot.relativize(targetFile), stats.encryptedCount, stats.totalValues);
     }
 
-    private void copyEmptyYamlFile(Path sourceFile, Path sourceRoot, Path targetRoot) throws IOException {
-        // Calculate relative path from source root
-        Path relativePath = sourceRoot.relativize(sourceFile);
-        
-        // Create target file path maintaining directory structure
-        String fileName = sourceFile.getFileName().toString();
-        String encryptedFileName = fileName.replace(".yml", "-encrypted.yml").replace(".yaml", "-encrypted.yaml");
-        
-        // Get the relative directory path and create it in target
-        Path relativeDir = relativePath.getParent();
-        Path targetDir = relativeDir != null ? targetRoot.resolve(relativeDir) : targetRoot;
-        Files.createDirectories(targetDir);
-        
-        Path targetFile = targetDir.resolve(encryptedFileName);
-        
-        // Copy the empty file as-is
-        Files.copy(sourceFile, targetFile);
-        
-        System.out.printf("✓ %s -> %s (Empty file copied)%n", 
-                relativePath, targetRoot.relativize(targetFile));
-    }
-
     @SuppressWarnings("unchecked")
     private Map<String, Object> shuffleKeysRecursively(Map<String, Object> config, String parentKey) {
         Map<String, Object> result = new LinkedHashMap<>();
@@ -216,7 +194,7 @@ public class ConfigFileProcessor {
 
     private String generateShuffledKey(String originalKey) {
         // For simple keys, we'll use a deterministic approach to make it more readable
-        // Generate a hash-based shuffled key to ensure consistency
+        // Generate a hash-based shuffled key to ensure consistency without underscores
         int hash = originalKey.hashCode();
         String shuffledKey = "key" + Math.abs(hash);
         
@@ -224,7 +202,7 @@ public class ConfigFileProcessor {
         String finalShuffledKey = shuffledKey;
         int counter = 1;
         while (keyMapping.containsValue(finalShuffledKey)) {
-            finalShuffledKey = shuffledKey + "_" + counter;
+            finalShuffledKey = shuffledKey + counter;
             counter++;
         }
         
@@ -367,13 +345,77 @@ public class ConfigFileProcessor {
         }
     }
 
-    private void saveKeyMapping(File mappingFile) throws IOException {
+    private void copyEmptyYamlFile(Path sourceFile, Path sourceRoot, Path targetRoot) throws IOException {
+        // Calculate relative path from source root
+        Path relativePath = sourceRoot.relativize(sourceFile);
+        
+        // Create target file path maintaining directory structure
+        String fileName = sourceFile.getFileName().toString();
+        String encryptedFileName = fileName.replace(".yml", "-encrypted.yml").replace(".yaml", "-encrypted.yaml");
+        
+        // Get the relative directory path and create it in target
+        Path relativeDir = relativePath.getParent();
+        Path targetDir = relativeDir != null ? targetRoot.resolve(relativeDir) : targetRoot;
+        Files.createDirectories(targetDir);
+        
+        Path targetFile = targetDir.resolve(encryptedFileName);
+        
+        // Copy the empty file as-is, replacing if it already exists
+        Files.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
+        
+        System.out.printf("✓ %s -> %s (Empty file copied)%n", 
+                relativePath, targetRoot.relativize(targetFile));
+    }
+
+    private void saveKeyMappingsPerDirectory(Path sourceRoot, Path targetRoot) throws IOException {
+        // Group mappings by directory
+        Map<Path, Map<String, String>> mappingsByDirectory = new HashMap<>();
+        
+        for (Map.Entry<String, String> entry : keyMapping.entrySet()) {
+            String fullKey = entry.getKey();
+            
+            // Determine which directory this key belongs to
+            // For simplicity, we'll use the first part of the key as the directory identifier
+            String[] parts = fullKey.split("\\.");
+            if (parts.length > 0) {
+                Path dirKey = Paths.get(parts[0]);
+                mappingsByDirectory.computeIfAbsent(dirKey, k -> new HashMap<>()).put(fullKey, entry.getValue());
+            } else {
+                // Fallback to root directory
+                mappingsByDirectory.computeIfAbsent(Paths.get(""), k -> new HashMap<>()).put(fullKey, entry.getValue());
+            }
+        }
+        
+        // Save mapping file in each relevant directory
+        for (Map.Entry<Path, Map<String, String>> dirEntry : mappingsByDirectory.entrySet()) {
+            Path dirKey = dirEntry.getKey();
+            Map<String, String> dirMappings = dirEntry.getValue();
+            
+            if (!dirMappings.isEmpty()) {
+                // Create mapping file path
+                Path mappingFilePath;
+                if (dirKey.toString().isEmpty()) {
+                    // Root directory
+                    mappingFilePath = targetRoot.resolve("key-mapping.properties");
+                } else {
+                    // Subdirectory
+                    mappingFilePath = targetRoot.resolve(dirKey.toString() + "-mapping.properties");
+                }
+                
+                // Save the mapping
+                saveKeyMapping(dirMappings, mappingFilePath.toFile());
+                System.out.println("Key mapping saved to: " + mappingFilePath);
+            }
+        }
+    }
+
+    private void saveKeyMapping(Map<String, String> mappings, File mappingFile) throws IOException {
         try (FileWriter writer = new FileWriter(mappingFile)) {
             writer.write("# Key Mapping File\n");
             writer.write("# Original Key -> Shuffled Key\n\n");
             
             // Sort the keys for consistent output
-            Map<String, String> sortedMapping = new TreeMap<>(keyMapping);
+            Map<String, String> sortedMapping = new TreeMap<>(mappings);
             
             for (Map.Entry<String, String> entry : sortedMapping.entrySet()) {
                 writer.write(entry.getKey() + "=" + entry.getValue() + "\n");

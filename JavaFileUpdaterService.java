@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -115,13 +116,6 @@ public class JavaFileUpdaterService {
             return true;
         }
         
-        // Check for other common configuration-related patterns
-        if (content.contains("Environment.getProperty") || 
-            content.contains("Value(") || 
-            content.contains("@Value(")) {
-            return true;
-        }
-        
         return false;
     }
 
@@ -136,6 +130,9 @@ public class JavaFileUpdaterService {
         String originalContent = content;
         
         System.out.println("Updating configuration-related Java file: " + javaFile.getFileName());
+        
+        // Check if this is a @ConfigurationProperties class
+        boolean isConfigPropertiesClass = content.contains("@ConfigurationProperties");
         
         // Update @ConfigurationProperties prefix values
         Pattern configPropsPattern = Pattern.compile("@ConfigurationProperties\\(prefix\\s*=\\s*\"([^\"]+)\"\\)");
@@ -157,34 +154,68 @@ public class JavaFileUpdaterService {
         configPropsMatcher.appendTail(sb);
         content = sb.toString();
         
-        // Update method names that follow the pattern get/set + capitalized key
-        // We need to be careful here to avoid false positives
-        for (Map.Entry<String, String> entry : keyMapping.entrySet()) {
-            String originalKey = entry.getKey();
-            String shuffledKey = entry.getValue();
-            
-            // Only process top-level keys (not nested ones like app.name)
-            if (!originalKey.contains(".")) {
-                // Update getter method names: getOriginalKey -> getShuffledKey
-                String originalGetter = "get" + capitalizeFirstLetter(originalKey);
-                String shuffledGetter = "get" + capitalizeFirstLetter(shuffledKey);
-                if (!originalGetter.equals(shuffledGetter)) {
-                    content = content.replace(originalGetter, shuffledGetter);
-                    System.out.println("  Updated getter: " + originalGetter + " -> " + shuffledGetter);
-                }
+        if (isConfigPropertiesClass) {
+            // Update field names, getter and setter method names in @ConfigurationProperties classes
+            for (Map.Entry<String, String> entry : keyMapping.entrySet()) {
+                String originalKey = entry.getKey();
+                String shuffledKey = entry.getValue();
                 
-                // Update setter method names: setOriginalKey -> setShuffledKey
-                String originalSetter = "set" + capitalizeFirstLetter(originalKey);
-                String shuffledSetter = "set" + capitalizeFirstLetter(shuffledKey);
-                if (!originalSetter.equals(shuffledSetter)) {
-                    content = content.replace(originalSetter, shuffledSetter);
-                    System.out.println("  Updated setter: " + originalSetter + " -> " + shuffledSetter);
+                // Only process top-level keys (not nested ones like app.name)
+                if (!originalKey.contains(".")) {
+                    // Update field declarations: private String originalKey; -> private String shuffledKey;
+                    // We need to be careful to only replace the field name, not other occurrences
+                    content = content.replaceAll("(private\\s+\\w+\\s+)" + Pattern.quote(originalKey) + "\\s*;", "$1" + shuffledKey + ";");
+                    if (!originalKey.equals(shuffledKey)) {
+                        System.out.println("  Updated field declaration: " + originalKey + " -> " + shuffledKey);
+                    }
+                    
+                    // Update getter method names: getOriginalKey -> getShuffledKey
+                    String originalGetter = "get" + capitalizeFirstLetter(originalKey);
+                    String shuffledGetter = "get" + capitalizeFirstLetter(shuffledKey);
+                    if (!originalGetter.equals(shuffledGetter)) {
+                        content = content.replace(originalGetter, shuffledGetter);
+                        System.out.println("  Updated getter in @ConfigurationProperties class: " + originalGetter + " -> " + shuffledGetter);
+                    }
+                    
+                    // Update setter method names: setOriginalKey -> setShuffledKey
+                    String originalSetter = "set" + capitalizeFirstLetter(originalKey);
+                    String shuffledSetter = "set" + capitalizeFirstLetter(shuffledKey);
+                    if (!originalSetter.equals(shuffledSetter)) {
+                        content = content.replace(originalSetter, shuffledSetter);
+                        System.out.println("  Updated setter in @ConfigurationProperties class: " + originalSetter + " -> " + shuffledSetter);
+                    }
+                    
+                    // Update constructor parameters and assignments
+                    // Update constructor parameter: public ClassName(String originalKey) -> public ClassName(String shuffledKey)
+                    content = content.replaceAll("\\b" + Pattern.quote(originalKey) + "\\b(?=\\s*[\\)\\,])", shuffledKey);
+                    
+                    // Update field assignments in constructors or methods
+                    content = content.replaceAll("\\bthis\\." + Pattern.quote(originalKey) + "\\b", "this." + shuffledKey);
+                    
+                    // Update field references in strings (like in logs or error messages)
+                    if (!originalKey.equals(shuffledKey)) {
+                        content = content.replace("\"" + originalKey + "\"", "\"" + shuffledKey + "\"");
+                        System.out.println("  Updated string reference: \"" + originalKey + "\" -> \"" + shuffledKey + "\"");
+                    }
                 }
+            }
+        } else {
+            // Update configProperties.method() calls in other classes
+            // Only update method calls that start with configProperties.
+            for (Map.Entry<String, String> entry : keyMapping.entrySet()) {
+                String originalKey = entry.getKey();
+                String shuffledKey = entry.getValue();
                 
-                // Update field references in strings (like in logs or error messages)
-                if (!originalKey.equals(shuffledKey)) {
-                    content = content.replace("\"" + originalKey + "\"", "\"" + shuffledKey + "\"");
-                    System.out.println("  Updated string reference: \"" + originalKey + "\" -> \"" + shuffledKey + "\"");
+                // Only process top-level keys (not nested ones like app.name)
+                if (!originalKey.contains(".")) {
+                    // Update configProperties.getOriginalKey() -> configProperties.getShuffledKey()
+                    String originalMethodCall = "configProperties.get" + capitalizeFirstLetter(originalKey) + "(";
+                    String shuffledMethodCall = "configProperties.get" + capitalizeFirstLetter(shuffledKey) + "(";
+                    
+                    if (!originalMethodCall.equals(shuffledMethodCall)) {
+                        content = content.replace(originalMethodCall, shuffledMethodCall);
+                        System.out.println("  Updated method call: " + originalMethodCall + " -> " + shuffledMethodCall);
+                    }
                 }
             }
         }
@@ -206,5 +237,19 @@ public class JavaFileUpdaterService {
             return str;
         }
         return str.substring(0, 1).toUpperCase() + str.substring(1);
+    }
+    
+    /**
+     * Copies a file, replacing it if it already exists
+     * @param sourceFile The source file to copy
+     * @param targetFile The target file location
+     * @throws IOException if there's an error copying the file
+     */
+    public void copyFileReplacingExisting(Path sourceFile, Path targetFile) throws IOException {
+        // Create parent directories if they don't exist
+        Files.createDirectories(targetFile.getParent());
+        
+        // Copy file, replacing if it already exists
+        Files.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
     }
 }
