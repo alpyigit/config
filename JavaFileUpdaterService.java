@@ -237,6 +237,22 @@ public class JavaFileUpdaterService {
                     setterMatcher.appendTail(setterSb);
                     content = setterSb.toString();
                     
+                    // Update List-specific method names
+                    // Handle getOriginalKeyList(), setOriginalKeyList(), etc.
+                    String originalListGetter = "get" + capitalizeFirstLetter(originalKey) + "List";
+                    String shuffledListGetter = "get" + capitalizeFirstLetter(shuffledKey) + "List";
+                    if (!originalListGetter.equals(shuffledListGetter)) {
+                        content = content.replace(originalListGetter, shuffledListGetter);
+                        System.out.println("  Updated List getter: " + originalListGetter + " -> " + shuffledListGetter);
+                    }
+                    
+                    String originalListSetter = "set" + capitalizeFirstLetter(originalKey) + "List";
+                    String shuffledListSetter = "set" + capitalizeFirstLetter(shuffledKey) + "List";
+                    if (!originalListSetter.equals(shuffledListSetter)) {
+                        content = content.replace(originalListSetter, shuffledListSetter);
+                        System.out.println("  Updated List setter: " + originalListSetter + " -> " + shuffledListSetter);
+                    }
+                    
                     // Update field references in strings (like in logs or error messages)
                     if (!originalKey.equals(shuffledKey)) {
                         content = content.replace("\"" + originalKey + "\"", "\"" + shuffledKey + "\"");
@@ -260,6 +276,16 @@ public class JavaFileUpdaterService {
                     if (!originalMethodCall.equals(shuffledMethodCall)) {
                         content = content.replace(originalMethodCall, shuffledMethodCall);
                         System.out.println("  Updated method call: " + originalMethodCall + " -> " + shuffledMethodCall);
+                    }
+                    
+                    // Update List-specific method calls
+                    // Handle configProperties.getOriginalKeyList() -> configProperties.getShuffledKeyList()
+                    String originalListMethodCall = "configProperties.get" + capitalizeFirstLetter(originalKey) + "List(";
+                    String shuffledListMethodCall = "configProperties.get" + capitalizeFirstLetter(shuffledKey) + "List(";
+                    
+                    if (!originalListMethodCall.equals(shuffledListMethodCall)) {
+                        content = content.replace(originalListMethodCall, shuffledListMethodCall);
+                        System.out.println("  Updated List method call: " + originalListMethodCall + " -> " + shuffledListMethodCall);
                     }
                 }
             }
