@@ -129,8 +129,8 @@ public class ConfigEncryptorRunner implements CommandLineRunner {
     
     private void updateClientJavaFiles(String sourceDir, String targetDir) {
         try {
-            // Load key mapping from the mapping file
-            String mappingFilePath = Paths.get(sourceDir).getParent().resolve("config-repo-key-mapping.yml").toString();
+            // Load key mapping from the new mapping directory
+            String mappingFilePath = Paths.get(sourceDir).getParent().resolve("config-repo-key-mappings").resolve("key-mapping.yml").toString();
             Map<String, String> keyMapping = javaFileUpdaterService.loadKeyMapping(mappingFilePath);
             
             if (keyMapping.isEmpty()) {

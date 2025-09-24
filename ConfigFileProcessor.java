@@ -97,8 +97,8 @@ public class ConfigFileProcessor {
                     }
                 });
 
-        // Save key mapping to file
-        saveKeyMapping(sourcePath.getParent(), sourcePath.getFileName().toString());
+        // Save key mapping to file in a separate directory for each client application
+        saveKeyMappingPerClient(sourcePath.getParent(), sourcePath.getFileName().toString());
 
         System.out.println("Configuration encryption completed!");
         System.out.println("Source directory: " + sourceDir);
@@ -106,17 +106,26 @@ public class ConfigFileProcessor {
     }
 
     /**
-     * Save key mapping to a file in the parent directory
+     * Save key mapping to a file in a separate directory for each client application
      */
-    private void saveKeyMapping(Path parentDir, String repoName) throws IOException {
+    private void saveKeyMappingPerClient(Path parentDir, String repoName) throws IOException {
         if (!keyMapping.isEmpty()) {
-            Path mappingFile = parentDir.resolve(repoName + "-key-mapping.yml");
+            // Create a directory for key mappings
+            Path mappingDir = parentDir.resolve(repoName + "-key-mappings");
+            Files.createDirectories(mappingDir);
+            
+            // Group mappings by client application (based on file name patterns)
+            Map<String, Map<String, String>> clientMappings = new HashMap<>();
+            
+            // For now, we'll create a single mapping file, but this can be extended
+            // to create separate mappings for each client application
             Map<String, Object> mappingData = new LinkedHashMap<>();
             mappingData.put("repository", repoName);
             mappingData.put("generatedAt", new Date().toString());
             mappingData.put("keyMapping", keyMapping);
             
             String yamlContent = snakeYaml.dump(mappingData);
+            Path mappingFile = mappingDir.resolve("key-mapping.yml");
             Files.write(mappingFile, yamlContent.getBytes());
             System.out.println("Key mapping saved to: " + mappingFile);
         }
@@ -249,30 +258,38 @@ public class ConfigFileProcessor {
                 String fullKey = parentKey.isEmpty() ? key : parentKey + "." + key;
                 currentKey = fullKey; // Track current key for error logging
 
-                // Shuffle the key only if the value will be encrypted
+                // Only shuffle keys that are under "configurations" section
                 String shuffledKey;
-                if (value instanceof String && shouldEncrypt((String) value)) {
-                    shuffledKey = shuffleKey(key);
-                    if (!key.equals(shuffledKey)) {
-                        keyMapping.put(key, shuffledKey);
-                        System.out.println("  🔀 Key shuffled: " + key + " -> " + shuffledKey);
-                    }
-                } else if (value instanceof Boolean && !isSpringMetadata(fullKey)) {
-                    // Booleans are encrypted unless they are Spring metadata
-                    shuffledKey = shuffleKey(key);
-                    if (!key.equals(shuffledKey)) {
-                        keyMapping.put(key, shuffledKey);
-                        System.out.println("  🔀 Key shuffled: " + key + " -> " + shuffledKey);
-                    }
-                } else if (value instanceof Number && !isSpringMetadata(fullKey)) {
-                    // Numbers are encrypted unless they are Spring metadata
-                    shuffledKey = shuffleKey(key);
-                    if (!key.equals(shuffledKey)) {
-                        keyMapping.put(key, shuffledKey);
-                        System.out.println("  🔀 Key shuffled: " + key + " -> " + shuffledKey);
+                boolean isUnderConfigurations = fullKey.startsWith("configurations.") || parentKey.equals("configurations");
+                
+                if (isUnderConfigurations) {
+                    // Shuffle the key only if the value will be encrypted
+                    if (value instanceof String && shouldEncrypt((String) value)) {
+                        shuffledKey = shuffleKey(key);
+                        if (!key.equals(shuffledKey)) {
+                            keyMapping.put(key, shuffledKey);
+                            System.out.println("  🔀 Key shuffled: " + key + " -> " + shuffledKey);
+                        }
+                    } else if (value instanceof Boolean && !isSpringMetadata(fullKey)) {
+                        // Booleans are encrypted unless they are Spring metadata
+                        shuffledKey = shuffleKey(key);
+                        if (!key.equals(shuffledKey)) {
+                            keyMapping.put(key, shuffledKey);
+                            System.out.println("  🔀 Key shuffled: " + key + " -> " + shuffledKey);
+                        }
+                    } else if (value instanceof Number && !isSpringMetadata(fullKey)) {
+                        // Numbers are encrypted unless they are Spring metadata
+                        shuffledKey = shuffleKey(key);
+                        if (!key.equals(shuffledKey)) {
+                            keyMapping.put(key, shuffledKey);
+                            System.out.println("  🔀 Key shuffled: " + key + " -> " + shuffledKey);
+                        }
+                    } else {
+                        // For non-encrypted values, keep the original key
+                        shuffledKey = key;
                     }
                 } else {
-                    // For non-encrypted values, keep the original key
+                    // For keys not under "configurations", keep the original key
                     shuffledKey = key;
                 }
 
@@ -467,8 +484,8 @@ public class ConfigFileProcessor {
         Random random = new Random(hash);
         
         // Generate a shuffled key using a predefined set of characters
-        // Avoiding underscores as requested and using only lowercase letters
-        String chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+        // Avoiding underscores and numbers as requested, using only lowercase letters
+        String chars = "abcdefghijklmnopqrstuvwxyz";
         StringBuilder shuffled = new StringBuilder();
         
         // Create a unique pattern based on the hash

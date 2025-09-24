@@ -48,13 +48,47 @@ public class JavaFileUpdaterService {
                 .forEach(projectDir -> {
                     try {
                         System.out.println("Scanning Java files in project: " + projectDir.getFileName());
-                        updateJavaFilesInProject(projectDir, keyMapping);
+                        // Load the key mapping specific to this project
+                        Map<String, String> projectKeyMapping = loadProjectKeyMapping(workspaceRoot.resolve("config-repo-key-mappings").resolve("key-mapping.yml").toString());
+                        if (!projectKeyMapping.isEmpty()) {
+                            updateJavaFilesInProject(projectDir, projectKeyMapping);
+                        } else {
+                            System.out.println("  No key mapping found for project: " + projectDir.getFileName());
+                        }
                     } catch (IOException e) {
                         System.err.println("Failed to scan project directory: " + projectDir + " - " + e.getMessage());
                     }
                 });
                 
         System.out.println("Finished updating all client Java files.");
+    }
+    
+    /**
+     * Load key mapping specific to a project
+     * @param mappingFilePath Path to the key mapping YAML file
+     * @return Map of original keys to shuffled keys
+     * @throws IOException if there's an error reading the file
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, String> loadProjectKeyMapping(String mappingFilePath) throws IOException {
+        Path path = Paths.get(mappingFilePath);
+        if (!Files.exists(path)) {
+            System.out.println("Project key mapping file not found: " + mappingFilePath);
+            return new HashMap<>();
+        }
+        
+        String content = new String(Files.readAllBytes(path));
+        Yaml yaml = new Yaml();
+        Map<String, Object> data = yaml.load(content);
+        
+        if (data.containsKey("keyMapping") && data.get("keyMapping") instanceof Map) {
+            Map<String, String> keyMapping = (Map<String, String>) data.get("keyMapping");
+            System.out.println("Loaded " + keyMapping.size() + " key mappings from: " + mappingFilePath);
+            return keyMapping;
+        }
+        
+        System.out.println("No key mapping found in file: " + mappingFilePath);
+        return new HashMap<>();
     }
 
     /**
