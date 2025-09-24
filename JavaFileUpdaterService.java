@@ -231,7 +231,8 @@ public class JavaFileUpdaterService {
                     
                     // Update setter method parameter references
                     // Find setter methods and update parameter references inside them
-                    Pattern setterPattern = Pattern.compile("(" + Pattern.quote(originalSetter) + "\\s*\\(\\s*\\w+\\s+" + Pattern.quote(originalKey) + "\\s*\\)\\s*\\{[^}]*?)(this\\." + Pattern.quote(originalKey) + "\\s*=\\s*" + Pattern.quote(originalKey) + "\\s*;)");
+                    // Handle multi-line formatting where the method body might be on the next line
+                    Pattern setterPattern = Pattern.compile("(" + Pattern.quote(originalSetter) + "\\s*\\(\\s*[^)]*?\\s+" + Pattern.quote(originalKey) + "\\s*\\)\\s*\\{[^}]*?)(this\\." + Pattern.quote(originalKey) + "\\s*=\\s*" + Pattern.quote(originalKey) + "\\s*;)");
                     Matcher setterMatcher = setterPattern.matcher(content);
                     StringBuffer setterSb = new StringBuffer();
                     while (setterMatcher.find()) {
@@ -244,21 +245,10 @@ public class JavaFileUpdaterService {
                     setterMatcher.appendTail(setterSb);
                     content = setterSb.toString();
                     
-                    // Update List-specific method names
-                    // Handle getOriginalKeyList(), setOriginalKeyList(), etc.
-                    String originalListGetter = "get" + capitalizeFirstLetter(originalKey) + "List";
-                    String shuffledListGetter = "get" + capitalizeFirstLetter(shuffledKey) + "List";
-                    if (!originalListGetter.equals(shuffledListGetter)) {
-                        content = content.replace(originalListGetter, shuffledListGetter);
-                        System.out.println("  Updated List getter: " + originalListGetter + " -> " + shuffledListGetter);
-                    }
-                    
-                    String originalListSetter = "set" + capitalizeFirstLetter(originalKey) + "List";
-                    String shuffledListSetter = "set" + capitalizeFirstLetter(shuffledKey) + "List";
-                    if (!originalListSetter.equals(shuffledListSetter)) {
-                        content = content.replace(originalListSetter, shuffledListSetter);
-                        System.out.println("  Updated List setter: " + originalListSetter + " -> " + shuffledListSetter);
-                    }
+                    // Also handle multi-line setter method declarations
+                    // Match setter methods where the parameter might be on a different line
+                    Pattern multiLineSetterPattern = Pattern.compile("(" + Pattern.quote(originalSetter) + "\\s*\\(\\s*[^)]*?\\s+" + Pattern.quote(originalKey) + "\\s*\\)[\\s\n\r]*\\{)");
+                    content = multiLineSetterPattern.matcher(content).replaceAll("$1");
                     
                     // Update field references in strings (like in logs or error messages)
                     if (!originalKey.equals(shuffledKey)) {
@@ -277,23 +267,11 @@ public class JavaFileUpdaterService {
                 // Only process top-level keys (not nested ones like app.name)
                 if (!originalKey.contains(".")) {
                     // Update configProperties.getOriginalKey() -> configProperties.getShuffledKey()
-                    String originalMethodCall = "configProperties.get" + capitalizeFirstLetter(originalKey) + "(";
-                    String shuffledMethodCall = "configProperties.get" + capitalizeFirstLetter(shuffledKey) + "(";
-                    
-                    if (!originalMethodCall.equals(shuffledMethodCall)) {
-                        content = content.replace(originalMethodCall, shuffledMethodCall);
-                        System.out.println("  Updated method call: " + originalMethodCall + " -> " + shuffledMethodCall);
-                    }
-                    
-                    // Update List-specific method calls
-                    // Handle configProperties.getOriginalKeyList() -> configProperties.getShuffledKeyList()
-                    String originalListMethodCall = "configProperties.get" + capitalizeFirstLetter(originalKey) + "List(";
-                    String shuffledListMethodCall = "configProperties.get" + capitalizeFirstLetter(shuffledKey) + "List(";
-                    
-                    if (!originalListMethodCall.equals(shuffledListMethodCall)) {
-                        content = content.replace(originalListMethodCall, shuffledListMethodCall);
-                        System.out.println("  Updated List method call: " + originalListMethodCall + " -> " + shuffledListMethodCall);
-                    }
+                    // Handle multi-line formatting where configProperties. might be on a different line
+                    String originalMethodCall = "configProperties\\s*\\.\\s*" + "get" + capitalizeFirstLetter(originalKey) + "\\s*\\(";
+                    // Use regex replacement to handle multi-line formatting
+                    content = content.replaceAll(originalMethodCall, "configProperties." + "get" + capitalizeFirstLetter(shuffledKey) + "(");
+                    System.out.println("  Updated method call for key: " + originalKey + " -> " + shuffledKey);
                 }
             }
         }
