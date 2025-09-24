@@ -192,9 +192,16 @@ public class JavaFileUpdaterService {
                 
                 // Only process top-level keys (not nested ones like app.name)
                 if (!originalKey.contains(".")) {
-                    // Update field declarations: private String originalKey; -> private String shuffledKey;
-                    content = content.replaceAll("(private\\s+\\w+\\s+)" + Pattern.quote(originalKey) + "\\s*;", "$1" + shuffledKey + ";");
-                    if (!originalKey.equals(shuffledKey)) {
+                    // Update field declarations - match any field declaration with the exact field name
+                    // This pattern matches field declarations regardless of their type
+                    // It looks for the field name followed by ; or = or whitespace+;
+                    content = content.replaceAll("(\\s)" + Pattern.quote(originalKey) + "\\s*;", "$1" + shuffledKey + ";");
+                    content = content.replaceAll("(\\s)" + Pattern.quote(originalKey) + "\\s*=", "$1" + shuffledKey + " =");
+                    
+                    // Check if any field declarations were updated
+                    if (!originalKey.equals(shuffledKey) && 
+                        (content.contains(shuffledKey + ";") || content.contains(shuffledKey + " =")) && 
+                        (!originalContent.contains(shuffledKey + ";") && !originalContent.contains(shuffledKey + " ="))) {
                         System.out.println("  Updated field declaration: " + originalKey + " -> " + shuffledKey);
                     }
                     
