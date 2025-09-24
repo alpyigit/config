@@ -249,11 +249,31 @@ public class ConfigFileProcessor {
                 String fullKey = parentKey.isEmpty() ? key : parentKey + "." + key;
                 currentKey = fullKey; // Track current key for error logging
 
-                // Shuffle the key
-                String shuffledKey = shuffleKey(key);
-                if (!key.equals(shuffledKey)) {
-                    keyMapping.put(key, shuffledKey);
-                    System.out.println("  🔀 Key shuffled: " + key + " -> " + shuffledKey);
+                // Shuffle the key only if the value will be encrypted
+                String shuffledKey;
+                if (value instanceof String && shouldEncrypt((String) value)) {
+                    shuffledKey = shuffleKey(key);
+                    if (!key.equals(shuffledKey)) {
+                        keyMapping.put(key, shuffledKey);
+                        System.out.println("  🔀 Key shuffled: " + key + " -> " + shuffledKey);
+                    }
+                } else if (value instanceof Boolean && !isSpringMetadata(fullKey)) {
+                    // Booleans are encrypted unless they are Spring metadata
+                    shuffledKey = shuffleKey(key);
+                    if (!key.equals(shuffledKey)) {
+                        keyMapping.put(key, shuffledKey);
+                        System.out.println("  🔀 Key shuffled: " + key + " -> " + shuffledKey);
+                    }
+                } else if (value instanceof Number && !isSpringMetadata(fullKey)) {
+                    // Numbers are encrypted unless they are Spring metadata
+                    shuffledKey = shuffleKey(key);
+                    if (!key.equals(shuffledKey)) {
+                        keyMapping.put(key, shuffledKey);
+                        System.out.println("  🔀 Key shuffled: " + key + " -> " + shuffledKey);
+                    }
+                } else {
+                    // For non-encrypted values, keep the original key
+                    shuffledKey = key;
                 }
 
                 try {
@@ -447,8 +467,8 @@ public class ConfigFileProcessor {
         Random random = new Random(hash);
         
         // Generate a shuffled key using a predefined set of characters
-        // Avoiding underscores as requested
-        String chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        // Avoiding underscores as requested and using only lowercase letters
+        String chars = "abcdefghijklmnopqrstuvwxyz0123456789";
         StringBuilder shuffled = new StringBuilder();
         
         // Create a unique pattern based on the hash

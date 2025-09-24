@@ -164,6 +164,14 @@ public class JavaFileUpdaterService {
                         System.out.println("  Updated field declaration: " + originalKey + " -> " + shuffledKey);
                     }
                     
+                    // Update field references in getter method bodies
+                    String originalFieldName = originalKey;
+                    String shuffledFieldName = shuffledKey;
+                    content = content.replaceAll("(this\\.)" + Pattern.quote(originalFieldName) + "\\b", "$1" + shuffledFieldName);
+                    if (!originalFieldName.equals(shuffledFieldName)) {
+                        System.out.println("  Updated field reference in method bodies: " + originalFieldName + " -> " + shuffledFieldName);
+                    }
+                    
                     // Update getter method names: getOriginalKey -> getShuffledKey
                     String originalGetter = "get" + capitalizeFirstLetter(originalKey);
                     String shuffledGetter = "get" + capitalizeFirstLetter(shuffledKey);
@@ -179,6 +187,21 @@ public class JavaFileUpdaterService {
                         content = content.replace(originalSetter, shuffledSetter);
                         System.out.println("  Updated setter in @ConfigurationProperties class: " + originalSetter + " -> " + shuffledSetter);
                     }
+                    
+                    // Update setter method parameter references
+                    // Find setter methods and update parameter references inside them
+                    Pattern setterPattern = Pattern.compile("(" + Pattern.quote(originalSetter) + "\\s*\\(\\s*\\w+\\s+" + Pattern.quote(originalKey) + "\\s*\\)\\s*\\{[^}]*?)(this\\." + Pattern.quote(originalKey) + "\\s*=\\s*" + Pattern.quote(originalKey) + "\\s*;)");
+                    Matcher setterMatcher = setterPattern.matcher(content);
+                    StringBuffer setterSb = new StringBuffer();
+                    while (setterMatcher.find()) {
+                        String methodBody = setterMatcher.group(1);
+                        String assignment = setterMatcher.group(2);
+                        // Replace the assignment with the shuffled key
+                        String newAssignment = assignment.replace(originalKey, shuffledKey);
+                        setterMatcher.appendReplacement(setterSb, methodBody + newAssignment);
+                    }
+                    setterMatcher.appendTail(setterSb);
+                    content = setterSb.toString();
                     
                     // Update field references in strings (like in logs or error messages)
                     if (!originalKey.equals(shuffledKey)) {
